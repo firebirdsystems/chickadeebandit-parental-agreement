@@ -6,9 +6,17 @@
   "entrypoint": "index.html",
   "runtime": "static",
   "category": "family",
-  "tags": ["parenting", "permissions", "kids", "agreements", "curfew"],
+  "tags": [
+    "parenting",
+    "permissions",
+    "kids",
+    "agreements",
+    "curfew"
+  ],
   "data_access": {
-    "reads": ["family.members"],
+    "reads": [
+      "family.members"
+    ],
     "writes": []
   },
   "permissions": {
@@ -16,11 +24,23 @@
     "requires_approval": false
   },
   "storage": "db",
-  "publishes": ["parental-agreement.approved", "parental-agreement.rejected"],
-  "alert_on": ["parental-agreement.approved", "parental-agreement.rejected"],
-  "nav": { "label": "Permissions", "icon": "✋" },
-  "widget": { "label": "Permissions", "size": "small" },
+  "publishes": [
+    "parental-agreement.approved",
+    "parental-agreement.rejected"
+  ],
+  "alert_on": [
+    "parental-agreement.approved",
+    "parental-agreement.rejected"
+  ],
+  "nav": {
+    "label": "Permissions"
+  },
+  "widget": {
+    "label": "Permissions",
+    "size": "small"
+  },
   "resource_limits": {
     "max_db_bytes": 52428800
-  }
+  },
+  "icon": "✋"
 }

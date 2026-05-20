@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parental Agreement</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           var(--hub-bg, #f9fafb);
+      --card:         var(--hub-surface, #ffffff);
+      --border:       var(--hub-border, #e5e7eb);
+      --border-mid:   var(--hub-border, #d1d5db);
+      --text:         var(--hub-text, #111827);
+      --muted:        var(--hub-text-muted, #6b7280);
+      --accent:       var(--hub-primary, #111827);
+      --accent-fg:    var(--hub-primary-fg, #ffffff);
+      --accent-hover: var(--hub-primary-hover, #374151);
+      --accent-light: #f3f4f6;
+      --green: #16a34a; --green-light: #dcfce7;
+      --amber: #d97706; --amber-light: #fef3c7;
+      --red: #dc2626;   --red-light: #fee2e2;
+      --radius:       var(--hub-radius, 0.5rem);
+      --shadow:       0 1px 3px rgba(0,0,0,.07);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .app { max-width: 600px; margin: 0 auto; padding: 16px; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding: 16px 20px;
+      background: var(--accent);
+      border-radius: var(--radius);
+      color: white;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; }
+    header .sub { font-size: 0.8rem; opacity: .75; margin-top: 2px; }
+
+    /* ── Buttons ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover:not(:disabled) { opacity: .88; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1.5px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-danger:hover:not(:disabled) { opacity: .88; }
+    .btn-success { background: var(--green); color: white; }
+    .btn-success:hover:not(:disabled) { opacity: .88; }
+    .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+
+    /* ── Tabs ────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1;
+      padding: 7px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      transition: all .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .tab.active { background: white; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .tab-badge {
+      background: var(--amber);
+      color: white;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    /* ── Request cards ───────────────────────────────────── */
+    .request-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: var(--shadow);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .request-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(3,105,161,.12); }
+    .request-card.needs-action { border-color: var(--amber); background: #fffbeb; }
+
+    .request-main { flex: 1; min-width: 0; }
+    .request-title { font-weight: 600; font-size: 1rem; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .request-who {
+      font-size: 0.82rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 3px;
+    }
+    .request-dates { font-size: 0.78rem; color: var(--muted); }
+
+    .request-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .action-needed { font-size: 0.72rem; font-weight: 600; color: var(--amber); text-align: right; }
+
+    /* ── Status badges ───────────────────────────────────── */
+    .status-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+    .status-pending   { background: var(--amber-light);  color: var(--amber); }
+    .status-approved  { background: var(--green-light);  color: var(--green); }
+    .status-rejected  { background: var(--red-light);    color: var(--red); }
+    .status-cancelled { background: var(--border);       color: var(--muted); }
+
+    /* ── Avatar ──────────────────────────────────────────── */
+    .avatar {
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    .avatar.sm { width: 24px; height: 24px; font-size: 0.7rem; }
+    .avatar.xs { width: 18px; height: 18px; font-size: 0.62rem; }
+
+    /* ── Modal ───────────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 100;
+    }
+    @media (min-width: 480px) {
+      .modal-backdrop { align-items: center; padding: 20px; }
+    }
+    .modal {
+      background: white;
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      max-width: 500px;
+      padding: 24px;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+    @media (min-width: 480px) { .modal { border-radius: var(--radius); } }
+    .modal h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
+
+    /* ── Form ────────────────────────────────────────────── */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .15s;
+      background: white;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus { border-color: var(--accent); }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+    .form-group .row { display: flex; gap: 10px; }
+    .form-group .row > * { flex: 1; }
+
+    .form-notice {
+      background: var(--amber-light);
+      color: var(--amber);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      margin-bottom: 14px;
+    }
+
+    /* ── Modal actions ───────────────────────────────────── */
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .modal-actions .btn { flex: 1; justify-content: center; min-width: 100px; }
+
+    /* ── Detail view ─────────────────────────────────────── */
+    .detail-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .detail-header h3 { margin-bottom: 0; }
+    .detail-desc {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .detail-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+    .detail-value { font-size: 0.92rem; font-weight: 500; }
+    .member-inline { display: flex; align-items: center; gap: 6px; }
+    .detail-section {
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      margin-bottom: 12px;
+    }
+
+    /* ── Approval note ───────────────────────────────────── */
+    .approval-note-box {
+      background: var(--green-light);
+      border: 1px solid var(--green);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      margin-bottom: 4px;
+      color: #14532d;
+    }
+    .approval-note-box.rejected {
+      background: var(--red-light);
+      border-color: var(--red);
+      color: #7f1d1d;
+    }
+    .approval-note-box .by { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+
+    /* ── Misc ────────────────────────────────────────────── */
+    .empty { text-align: center; padding: 36px 16px; color: var(--muted); font-size: 0.9rem; }
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+    .section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 8px;
+    }
+    .role-tag {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 2px 7px;
+      border-radius: 20px;
+      background: var(--border);
+      color: var(--muted);
+    }
+    .role-tag.adult { background: var(--accent-light); color: var(--accent); }
+  </style>
+  <base href="/run/parental-agreement/" />
+</head>
+<body>
+<div class="app">
+  <div id="root"><div class="loading">Loading…</div></div>
+</div>
+
+<script type="module">
+import { memberColor, initial, esc, isAdult } from "/hub-sdk.js";
+
+const CONTEXT = window.__CONTEXT_URL ?? "";
+const DB      = window.__DB_URL      ?? "";
+const APP_ID  = window.__APP_ID      ?? "parental-agreement";
+const ME      = window.__CURRENT_MEMBER ?? null;
+
+// ─── State ────────────────────────────────────────────────────────────────
+let members   = [];
+let requests  = [];
+let activeTab = "pending"; // adult: "pending" | "all" / child: "mine"
+
+// ─── DB helper ────────────────────────────────────────────────────────────
+async function db(sql, params = []) {
+  if (!DB) return { rows: [] };
+  const res = await fetch(DB, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  return res.json();
+}
+
+// ─── DB init ──────────────────────────────────────────────────────────────
+async function initDb() {
+  await db(`CREATE TABLE IF NOT EXISTS permissions (
+    id            TEXT PRIMARY KEY,
+    child_id      TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    from_datetime TEXT NOT NULL,
+    to_datetime   TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    approved_by   TEXT,
+    approved_at   TEXT,
+    approval_note TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+  )`);
+  await db(`CREATE TABLE IF NOT EXISTS activity (
+    id            TEXT PRIMARY KEY,
+    permission_id TEXT NOT NULL,
+    actor_id      TEXT NOT NULL,
+    action        TEXT NOT NULL,
+    detail        TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL
+  )`);
+}
+
+// ─── Load ─────────────────────────────────────────────────────────────────
+async function loadMembers() {
+  if (!CONTEXT) {
+    members = [
+      { id: "demo-1", name: "Alex",   role: "adult" },
+      { id: "demo-2", name: "Sam",    role: "adult" },
+      { id: "demo-3", name: "Jordan", role: "child" },
+      { id: "demo-4", name: "Casey",  role: "child" },
+    ];
+    return;
+  }
+  try {
+    const res = await fetch(`${CONTEXT}?keys=family.members`);
+    members = ((await res.json())["family.members"]) ?? [];
+  } catch { members = []; }
+}
+
+async function loadRequests() {
+  if (!DB || !ME) return;
+  const meIsAdult = isAdult(ME);
+
+  let rows;
+  if (meIsAdult) {
+    // Adults see all non-cancelled requests, plus their own cancelled ones
+    ({ rows } = await db(`
+      SELECT * FROM permissions
+      WHERE status != 'cancelled'
+      ORDER BY
+        CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        from_datetime ASC
+    `));
+  } else {
+    // Children see only their own requests
+    ({ rows } = await db(`
+      SELECT * FROM permissions
+      WHERE child_id = ?
+      ORDER BY
+        CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        from_datetime ASC
+    `, [ME.id]));
+  }
+  requests = rows ?? [];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function memberName(id) {
+  return members.find(m => m.id === id)?.name ?? "Unknown";
+}
+function mc(id) { return memberColor(id, members); }
+
+function adults() {
+  return members.filter(m => isAdult(m));
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+// Convert local datetime-local input value to ISO string
+function localToISO(local) {
+  if (!local) return "";
+  return new Date(local).toISOString();
+}
+
+// Convert ISO to datetime-local input value (YYYY-MM-DDTHH:MM)
+function isoToLocal(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function statusHtml(status) {
+  const map = {
+    pending:   ["status-pending",   "Pending"],
+    approved:  ["status-approved",  "✓ Approved"],
+    rejected:  ["status-rejected",  "✗ Rejected"],
+    cancelled: ["status-cancelled", "Cancelled"],
+  };
+  const [cls, label] = map[status] ?? ["status-pending", status];
+  return `<span class="status-badge ${cls}">${label}</span>`;
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────
+async function notify(title, body) {
+  await fetch("/api/notifications/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body, url: `/run/${APP_ID}` }),
+  }).catch(() => {});
+}
+
+// ─── Activity log ─────────────────────────────────────────────────────────
+async function logActivity(permissionId, action, detail = "") {
+  const id = crypto.randomUUID();
+  await db(`INSERT INTO activity (id, permission_id, actor_id, action, detail, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, permissionId, ME?.id ?? "system", action, detail, new Date().toISOString()]);
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────
+async function createRequest(fields) {
+  const id  = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db(`INSERT INTO permissions (
+    id, child_id, title, description,
+    from_datetime, to_datetime,
+    status, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`, [
+    id, ME.id, fields.title, fields.description,
+    fields.from_datetime, fields.to_datetime,
+    now, now,
+  ]);
+  await logActivity(id, "created", `${ME.name} submitted a new permission request`);
+  await notify(
+    `✋ ${ME.name} is requesting permission`,
+    `"${fields.title}" — open Parental Agreement to review`,
+  );
+  await loadRequests();
+  closeModal();
+  render();
+}
+
+async function updateRequest(reqId, fields) {
+  const now = new Date().toISOString();
+  // Reset approval and re-notify parents
+  await db(`UPDATE permissions SET
+    title = ?, description = ?,
+    from_datetime = ?, to_datetime = ?,
+    status = 'pending', approved_by = NULL, approved_at = NULL, approval_note = '',
+    updated_at = ?
+    WHERE id = ? AND status = 'pending'`,
+  [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId]);
+  await logActivity(reqId, "updated", `${ME.name} updated the request — re-approval required`);
+  await notify(
+    `Permission request updated — re-approval required`,
+    `${ME.name} updated "${fields.title}". Please review the changes and re-approve.`,
+  );
+  await loadRequests();
+  closeModal();
+  render();
+}
+
+async function approveRequest(reqId, note) {
+  const req = requests.find(r => r.id === reqId);
+  if (!req || req.status !== "pending") return;
+  const now = new Date().toISOString();
+  await db(`UPDATE permissions SET
+    status = 'approved', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
+    WHERE id = ?`,
+  [ME.id, now, note, now, reqId]);
+  await logActivity(reqId, "approved", `${ME.name} approved the request${note ? `: "${note}"` : ""}`);
+  await notify(
+    `✅ Permission approved by ${ME.name}`,
+    `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`,
+  );
+  await loadRequests();
+  closeModal();
+  render();
+}
+
+async function rejectRequest(reqId, note) {
+  const req = requests.find(r => r.id === reqId);
+  if (!req || req.status !== "pending") return;
+  const now = new Date().toISOString();
+  await db(`UPDATE permissions SET
+    status = 'rejected', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
+    WHERE id = ?`,
+  [ME.id, now, note, now, reqId]);
+  await logActivity(reqId, "rejected", `${ME.name} rejected the request${note ? `: "${note}"` : ""}`);
+  await notify(
+    `❌ Permission denied by ${ME.name}`,
+    `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`,
+  );
+  await loadRequests();
+  closeModal();
+  render();
+}
+
+async function cancelRequest(reqId) {
+  if (!confirm("Cancel this permission request?")) return;
+  const req = requests.find(r => r.id === reqId);
+  const now = new Date().toISOString();
+  await db(`UPDATE permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
+    [now, reqId, ME.id]);
+  await logActivity(reqId, "cancelled", `${ME.name} cancelled the request`);
+  if (req) {
+    await notify(
+      `Permission request cancelled`,
+      `${ME.name} cancelled the request for "${req.title}"`,
+    );
+  }
+  await loadRequests();
+  closeModal();
+  render();
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────
+let modalEl = null;
+function openModal(html) {
+  closeModal();
+  modalEl = document.createElement("div");
+  modalEl.className = "modal-backdrop";
+  modalEl.innerHTML = `<div class="modal">${html}</div>`;
+  modalEl.addEventListener("click", e => { if (e.target === modalEl) closeModal(); });
+  document.body.appendChild(modalEl);
+}
+function closeModal() { modalEl?.remove(); modalEl = null; }
+
+// ─── New / edit form ──────────────────────────────────────────────────────
+function openRequestForm(req = null) {
+  const isEdit = !!req;
+
+  openModal(`
+    <h3>${isEdit ? "Edit Request" : "New Permission Request"}</h3>
+    ${isEdit ? `<div class="form-notice">⚠️ Editing will clear the current approval — parents must re-approve.</div>` : ""}
+    <div class="form-group">
+      <label>What do you want to do?</label>
+      <input id="f-title" type="text" value="${esc(req?.title ?? "")}"
+        placeholder="Stay out after curfew, go to a concert…" autofocus />
+    </div>
+    <div class="form-group">
+      <label>Details <span style="font-weight:400;text-transform:none">(optional)</span></label>
+      <textarea id="f-desc" rows="3"
+        placeholder="Where are you going, who with, how are you getting there…">${esc(req?.description ?? "")}</textarea>
+    </div>
+    <div class="form-group">
+      <label>From</label>
+      <input id="f-from" type="datetime-local" value="${req ? isoToLocal(req.from_datetime) : ""}" />
+    </div>
+    <div class="form-group">
+      <label>Until</label>
+      <input id="f-to" type="datetime-local" value="${req ? isoToLocal(req.to_datetime) : ""}" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitForm('${req?.id ?? ""}')">
+        ${isEdit ? "Save Changes" : "Submit Request"}
+      </button>
+    </div>
+  `);
+}
+
+window.submitForm = async function(existingId) {
+  const title        = document.getElementById("f-title").value.trim();
+  const description  = document.getElementById("f-desc").value.trim();
+  const from_raw     = document.getElementById("f-from").value;
+  const to_raw       = document.getElementById("f-to").value;
+
+  if (!title)    { document.getElementById("f-title").focus(); return; }
+  if (!from_raw) { document.getElementById("f-from").focus();  return; }
+  if (!to_raw)   { document.getElementById("f-to").focus();    return; }
+
+  const from_datetime = localToISO(from_raw);
+  const to_datetime   = localToISO(to_raw);
+
+  if (existingId) {
+    await updateRequest(existingId, { title, description, from_datetime, to_datetime });
+  } else {
+    await createRequest({ title, description, from_datetime, to_datetime });
+  }
+};
+
+// ─── Approve / reject modal ───────────────────────────────────────────────
+function openDecisionModal(req, decision) {
+  const isApprove = decision === "approve";
+  openModal(`
+    <h3>${isApprove ? "✅ Approve Request" : "❌ Deny Request"}</h3>
+    <div style="margin-bottom:14px">
+      <div style="font-weight:600">${esc(req.title)}</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-top:3px">
+        ${formatDateTime(req.from_datetime)} → ${formatDateTime(req.to_datetime)}
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Note <span style="font-weight:400;text-transform:none">(optional)</span></label>
+      <input id="d-note" type="text"
+        placeholder="${isApprove ? "Be home by midnight, text when you arrive…" : "Reason for denying…"}"
+        autofocus />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn ${isApprove ? "btn-success" : "btn-danger"}"
+        onclick="submitDecision('${req.id}', '${decision}')">
+        ${isApprove ? "Approve" : "Deny"}
+      </button>
+    </div>
+  `);
+};
+
+window.submitDecision = async function(reqId, decision) {
+  const note = document.getElementById("d-note").value.trim();
+  if (decision === "approve") await approveRequest(reqId, note);
+  else                        await rejectRequest(reqId, note);
+};
+
+// ─── Detail modal ─────────────────────────────────────────────────────────
+function openDetailModal(req) {
+  const child       = members.find(m => m.id === req.child_id);
+  const approver    = req.approved_by ? members.find(m => m.id === req.approved_by) : null;
+  const meIsAdult   = isAdult(ME);
+  const isMyRequest = ME?.id === req.child_id;
+  const canEdit     = req.status === "pending" && isMyRequest;
+  const canDecide   = req.status === "pending" && meIsAdult;
+  const canCancel   = req.status === "pending" && isMyRequest;
+
+  const approvalBlock = (req.status === "approved" || req.status === "rejected") && req.approval_note
+    ? `<div class="approval-note-box ${req.status === "rejected" ? "rejected" : ""}">
+        <div>${esc(req.approval_note)}</div>
+        <div class="by">— ${esc(approver?.name ?? "A parent")}, ${formatDateTime(req.approved_at)}</div>
+       </div>`
+    : req.status !== "pending" && req.status !== "cancelled"
+      ? `<div class="approval-note-box ${req.status === "rejected" ? "rejected" : ""}">
+          <div class="by">${req.status === "approved" ? "Approved" : "Denied"} by ${esc(approver?.name ?? "A parent")} on ${formatDateTime(req.approved_at)}</div>
+         </div>`
+      : "";
+
+  openModal(`
+    <div class="detail-header">
+      <div>
+        <h3>${esc(req.title)}</h3>
+        <div style="margin-top:5px">${statusHtml(req.status)}</div>
+      </div>
+      ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="openEditForm('${req.id}')">Edit</button>` : ""}
+    </div>
+
+    ${req.description ? `<p class="detail-desc">${esc(req.description)}</p>` : ""}
+
+    <div class="detail-grid">
+      <div>
+        <div class="detail-label">Requested by</div>
+        <div class="detail-value member-inline">
+          <div class="avatar sm" style="background:${mc(req.child_id)}">${initial(child?.name ?? "?")}</div>
+          ${esc(child?.name ?? "?")}
+        </div>
+      </div>
+      <div>
+        <div class="detail-label">Submitted</div>
+        <div class="detail-value" style="font-size:.85rem">${formatDateTime(req.created_at)}</div>
+      </div>
+      <div>
+        <div class="detail-label">From</div>
+        <div class="detail-value">${formatDateTime(req.from_datetime)}</div>
+      </div>
+      <div>
+        <div class="detail-label">Until</div>
+        <div class="detail-value">${formatDateTime(req.to_datetime)}</div>
+      </div>
+    </div>
+
+    ${approvalBlock ? `<div class="detail-section">${approvalBlock}</div>` : ""}
+
+    <div class="modal-actions">
+      ${canDecide ? `
+        <button class="btn btn-success" onclick="openDecisionModal_('${req.id}', 'approve')">✓ Approve</button>
+        <button class="btn btn-danger"  onclick="openDecisionModal_('${req.id}', 'reject')">✗ Deny</button>
+      ` : ""}
+      ${canCancel ? `<button class="btn btn-ghost btn-sm" onclick="cancelRequest('${req.id}')">Cancel Request</button>` : ""}
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    </div>
+  `);
+}
+
+window.openEditForm = function(reqId) {
+  const req = requests.find(r => r.id === reqId);
+  closeModal();
+  if (req) openRequestForm(req);
+};
+
+window.openDecisionModal_ = function(reqId, decision) {
+  const req = requests.find(r => r.id === reqId);
+  if (!req) return;
+  closeModal();
+  openDecisionModal(req, decision);
+};
+
+window.cancelRequest  = cancelRequest;
+window.closeModal     = closeModal;
+
+// ─── Render ───────────────────────────────────────────────────────────────
+function renderCard(req) {
+  const child       = members.find(m => m.id === req.child_id);
+  const meIsAdult   = isAdult(ME);
+  const needsAction = req.status === "pending" && meIsAdult;
+
+  return `
+    <div class="request-card ${needsAction ? "needs-action" : ""}" onclick="openDetailModal_('${req.id}')">
+      <div class="request-main">
+        <div class="request-title">${esc(req.title)}</div>
+        <div class="request-who">
+          <div class="avatar xs" style="background:${mc(req.child_id)}">${initial(child?.name ?? "?")}</div>
+          ${esc(child?.name ?? "?")}
+        </div>
+        <div class="request-dates">${formatDateTime(req.from_datetime)} → ${formatDateTime(req.to_datetime)}</div>
+      </div>
+      <div class="request-right">
+        ${statusHtml(req.status)}
+        ${needsAction ? `<div class="action-needed">Needs approval</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function render() {
+  if (!ME) {
+    document.getElementById("root").innerHTML = `<div class="empty">Please log in to use Parental Agreement.</div>`;
+    return;
+  }
+
+  const meIsAdult = isAdult(ME);
+
+  if (meIsAdult) {
+    renderAdultView();
+  } else {
+    renderChildView();
+  }
+}
+
+function renderAdultView() {
+  const pending  = requests.filter(r => r.status === "pending");
+  const resolved = requests.filter(r => r.status !== "pending");
+
+  const list = activeTab === "pending" ? pending : resolved;
+  const listHtml = list.length === 0
+    ? `<div class="empty">${activeTab === "pending" ? "No pending requests — all caught up." : "No resolved requests yet."}</div>`
+    : list.map(r => renderCard(r)).join("");
+
+  document.getElementById("root").innerHTML = `
+    <header>
+      <div>
+        <h1>✋ Parental Agreement</h1>
+        <div class="sub">Review permission requests from your kids</div>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab ${activeTab === "pending" ? "active" : ""}" onclick="setTab('pending')">
+        Pending ${pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : ""}
+      </button>
+      <button class="tab ${activeTab === "all" ? "active" : ""}" onclick="setTab('all')">
+        Resolved
+      </button>
+    </div>
+
+    <div>${listHtml}</div>
+  `;
+}
+
+function renderChildView() {
+  const active   = requests.filter(r => r.status !== "cancelled");
+  const listHtml = active.length === 0
+    ? `<div class="empty">You haven't submitted any requests yet. Tap + New Request to ask for permission.</div>`
+    : active.map(r => renderCard(r)).join("");
+
+  document.getElementById("root").innerHTML = `
+    <header>
+      <div>
+        <h1>✋ Permissions</h1>
+        <div class="sub">Ask for permission from your parents</div>
+      </div>
+      <button class="btn btn-ghost"
+        style="background:rgba(255,255,255,.15);color:white;border-color:rgba(255,255,255,.3)"
+        onclick="openNewRequest()">+ New Request</button>
+    </header>
+
+    <div>${listHtml}</div>
+  `;
+}
+
+window.setTab = function(tab) { activeTab = tab; render(); };
+window.openNewRequest = function() { openRequestForm(); };
+window.openDetailModal_ = function(id) {
+  const req = requests.find(r => r.id === id);
+  if (req) openDetailModal(req);
+};
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+(async () => {
+  await loadMembers();
+  if (DB) {
+    await initDb();
+    await loadRequests();
+  }
+  render();
+})();
+</script>
+</body>
+</html>

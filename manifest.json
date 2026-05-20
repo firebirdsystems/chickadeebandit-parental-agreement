@@ -1,0 +1,26 @@
+{
+  "id": "parental-agreement",
+  "name": "Parental Agreement",
+  "version": "1.0.0",
+  "description": "Kids submit permission requests — staying out late, attending events, overnight trips. Parents are notified and must approve. Any edit resets approval and re-notifies parents.",
+  "entrypoint": "index.html",
+  "runtime": "static",
+  "category": "family",
+  "tags": ["parenting", "permissions", "kids", "agreements", "curfew"],
+  "data_access": {
+    "reads": ["family.members"],
+    "writes": []
+  },
+  "permissions": {
+    "default_audience": "everyone",
+    "requires_approval": false
+  },
+  "storage": "db",
+  "publishes": ["parental-agreement.approved", "parental-agreement.rejected"],
+  "alert_on": ["parental-agreement.approved", "parental-agreement.rejected"],
+  "nav": { "label": "Permissions", "icon": "✋" },
+  "widget": { "label": "Permissions", "size": "small" },
+  "resource_limits": {
+    "max_db_bytes": 52428800
+  }
+}

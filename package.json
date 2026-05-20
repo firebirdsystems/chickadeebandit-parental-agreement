@@ -1,0 +1,10 @@
+{
+  "name": "chickadee-app-parental-agreement",
+  "version": "1.0.0",
+  "description": "Parental Agreement app for Family Hub",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "license": "MIT"
+}

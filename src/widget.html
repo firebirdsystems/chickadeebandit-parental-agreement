@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parental Agreement Widget</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--hub-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      font-size: 13px;
+      background: #fff;
+      color: #111827;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px 8px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+    }
+    .header-title { font-weight: 600; font-size: 13px; }
+    .header-badge {
+      font-size: 11px; font-weight: 700;
+      background: #f59e0b; color: #fff;
+      border-radius: 10px; padding: 1px 7px;
+    }
+    .header-badge.zero { background: #e5e7eb; color: #6b7280; font-weight: 600; }
+
+    .item-list { flex: 1; overflow-y: auto; }
+
+    .item-row {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 7px 14px; border-bottom: 1px solid #f3f4f6;
+    }
+    .item-row:last-child { border-bottom: none; }
+
+    .pending-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #f59e0b; flex-shrink: 0; margin-top: 4px;
+    }
+
+    .item-info { flex: 1; min-width: 0; }
+    .item-title {
+      font-size: 12.5px; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .item-meta { font-size: 11px; color: #6b7280; margin-top: 1px; }
+
+    .item-time { font-size: 11px; color: #9ca3af; flex-shrink: 0; }
+
+    .footer {
+      padding: 6px 14px; border-top: 1px solid #e5e7eb;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; background: #f9fafb;
+    }
+    .open-link { font-size: 11px; font-weight: 600; color: #111827; text-decoration: none; }
+    .open-link:hover { text-decoration: underline; }
+
+    .empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #9ca3af; font-size: 12px; gap: 6px;
+    }
+  </style>
+</head>
+<body>
+<script type="module">
+const DB      = window.__DB_URL      ?? "";
+const CONTEXT = window.__CONTEXT_URL ?? "";
+const APP_ID  = "parental-agreement";
+
+function esc(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+async function dbq(sql, params = []) {
+  if (!DB) return { rows: [] };
+  const res = await fetch(DB, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  return res.json();
+}
+
+async function loadMembers() {
+  if (!CONTEXT) return {};
+  try {
+    const res = await fetch(`${CONTEXT}?keys=family.members`);
+    const data = await res.json();
+    const list = data["family.members"] ?? [];
+    return Object.fromEntries(list.map(m => [m.id, m.name]));
+  } catch { return {}; }
+}
+
+function fmtRelTime(iso) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+async function load() {
+  const [members, { rows }] = await Promise.all([
+    loadMembers(),
+    dbq(`SELECT id, child_id, title, from_datetime, to_datetime, status, created_at
+         FROM permissions
+         WHERE status = 'pending'
+         ORDER BY created_at ASC
+         LIMIT 20`),
+  ]);
+
+  const count = rows.length;
+
+  const header = `
+    <div class="header">
+      <span class="header-title">Permission Requests</span>
+      <span class="header-badge ${count === 0 ? "zero" : ""}">${count}</span>
+    </div>`;
+
+  let body;
+  if (count === 0) {
+    body = `<div class="empty">
+      <span>No pending requests</span>
+      <a href="/open/${APP_ID}" onclick="window.__HUB_OPEN && (event.preventDefault(), window.__HUB_OPEN('${APP_ID}'))" style="color:#111827;font-weight:600;font-size:11px">Open app →</a>
+    </div>`;
+  } else {
+    body = `<div class="item-list">
+      ${rows.map(r => {
+        const who = members[r.child_id] ?? "Someone";
+        const when = (() => {
+          if (!r.from_datetime) return "";
+          const d = new Date(r.from_datetime);
+          return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        })();
+        return `<div class="item-row">
+          <div class="pending-dot"></div>
+          <div class="item-info">
+            <div class="item-title">${esc(r.title)}</div>
+            <div class="item-meta">${esc(who)}${when ? ` · ${when}` : ""}</div>
+          </div>
+          <div class="item-time">${fmtRelTime(r.created_at)}</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+
+  const footer = `
+    <div class="footer">
+      <a class="open-link" href="/open/${APP_ID}" onclick="window.__HUB_OPEN && (event.preventDefault(), window.__HUB_OPEN('${APP_ID}'))">Review requests →</a>
+    </div>`;
+
+  document.body.innerHTML = header + body + footer;
+}
+
+load().catch(() => {
+  document.body.innerHTML = `<div class="empty"><a href="/open/${APP_ID}" style="color:#111827;font-weight:600">Open app →</a></div>`;
+});
+</script>
+</body>
+</html>

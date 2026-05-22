@@ -358,29 +358,7 @@ async function db(sql, params = []) {
 
 // ─── DB init ──────────────────────────────────────────────────────────────
 async function initDb() {
-  await db(`CREATE TABLE IF NOT EXISTS permissions (
-    id            TEXT PRIMARY KEY,
-    child_id      TEXT NOT NULL,
-    title         TEXT NOT NULL,
-    description   TEXT NOT NULL DEFAULT '',
-    from_datetime TEXT NOT NULL,
-    to_datetime   TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'pending',
-    approved_by   TEXT,
-    approved_at   TEXT,
-    approval_note TEXT NOT NULL DEFAULT '',
-    created_at    TEXT NOT NULL,
-    updated_at    TEXT NOT NULL
-  )`);
-  await db(`CREATE TABLE IF NOT EXISTS activity (
-    id            TEXT PRIMARY KEY,
-    permission_id TEXT NOT NULL,
-    actor_id      TEXT NOT NULL,
-    action        TEXT NOT NULL,
-    detail        TEXT NOT NULL DEFAULT '',
-    created_at    TEXT NOT NULL
-  )`);
-}
+  // Schema is managed by hub migrations (migrations/001_init.sql)}
 
 // ─── Load ─────────────────────────────────────────────────────────────────
 async function loadMembers() {

@@ -333,7 +333,7 @@
 </div>
 
 <script type="module">
-import { memberColor, initial, esc, isAdult } from "/hub-sdk.js";
+import { memberColor, initial, esc, isAdult, hubConfirm } from "/hub-sdk.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
@@ -546,7 +546,7 @@ async function rejectRequest(reqId, note) {
 }
 
 async function cancelRequest(reqId) {
-  if (!confirm("Cancel this permission request?")) return;
+  if (!await hubConfirm({ message: "Cancel this permission request?", confirmLabel: "Cancel request" })) return;
   const req = requests.find(r => r.id === reqId);
   const now = new Date().toISOString();
   await db(`UPDATE permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,

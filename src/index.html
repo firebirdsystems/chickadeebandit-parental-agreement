@@ -334,6 +334,7 @@
 
 <script type="module">
 import { memberColor, initial, esc, isAdult, hubConfirm } from "/hub-sdk.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
@@ -415,37 +416,8 @@ function adults() {
   return members.filter(m => isAdult(m));
 }
 
-function formatDateTime(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", {
-    month: "short", day: "numeric", year: "numeric",
-    hour: "numeric", minute: "2-digit",
-  });
-}
-
-// Convert local datetime-local input value to ISO string
-function localToISO(local) {
-  if (!local) return "";
-  return new Date(local).toISOString();
-}
-
-// Convert ISO to datetime-local input value (YYYY-MM-DDTHH:MM)
-function isoToLocal(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = n => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function statusHtml(status) {
-  const map = {
-    pending:   ["status-pending",   "Pending"],
-    approved:  ["status-approved",  "✓ Approved"],
-    rejected:  ["status-rejected",  "✗ Rejected"],
-    cancelled: ["status-cancelled", "Cancelled"],
-  };
-  const [cls, label] = map[status] ?? ["status-pending", status];
+  const { cls, label } = STATUS_INFO[status] ?? STATUS_INFO.pending;
   return `<span class="status-badge ${cls}">${label}</span>`;
 }
 
@@ -619,6 +591,9 @@ window.submitForm = async function(existingId) {
   if (!from_raw) { document.getElementById("f-from").focus();  return; }
   if (!to_raw)   { document.getElementById("f-to").focus();    return; }
 
+  const btn = modalEl?.querySelector('.modal-actions .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
   const from_datetime = localToISO(from_raw);
   const to_datetime   = localToISO(to_raw);
 
@@ -658,6 +633,8 @@ function openDecisionModal(req, decision) {
 
 window.submitDecision = async function(reqId, decision) {
   const note = document.getElementById("d-note").value.trim();
+  const btn = modalEl?.querySelector('.modal-actions button:not(.btn-ghost)');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   if (decision === "approve") await approveRequest(reqId, note);
   else                        await rejectRequest(reqId, note);
 };

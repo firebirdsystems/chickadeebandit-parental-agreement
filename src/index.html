@@ -430,6 +430,14 @@ async function notify(title, body) {
   }).catch(() => {});
 }
 
+async function publishEvent(type, subjectId, payload = {}) {
+  await fetch("/api/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_app_id: APP_ID, type, subject_id: subjectId, payload }),
+  }).catch(() => {});
+}
+
 // ─── Activity log ─────────────────────────────────────────────────────────
 async function logActivity(permissionId, action, detail = "") {
   const id = crypto.randomUUID();
@@ -494,6 +502,7 @@ async function approveRequest(reqId, note) {
     `✅ Permission approved by ${ME.name}`,
     `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`,
   );
+  await publishEvent("parental-agreement.approved", reqId, { title: req.title, approver: ME.name, child_id: req.child_id });
   await loadRequests();
   closeModal();
   render();
@@ -512,6 +521,7 @@ async function rejectRequest(reqId, note) {
     `❌ Permission denied by ${ME.name}`,
     `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`,
   );
+  await publishEvent("parental-agreement.rejected", reqId, { title: req.title, approver: ME.name, child_id: req.child_id });
   await loadRequests();
   closeModal();
   render();

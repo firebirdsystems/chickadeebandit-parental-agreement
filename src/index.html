@@ -464,6 +464,15 @@ async function createRequest(fields) {
     `✋ ${ME.name} is requesting permission`,
     `"${fields.title}" — open Parental Agreement to review`,
   );
+  fetch("/api/activity", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "message_posted",
+      actor: ME.name,
+      description: `${ME.name} is requesting permission: "${fields.title.slice(0, 60)}"`,
+      metadata: { deepLink: { appId: APP_ID, params: { requestId: id } } },
+    }),
+  }).catch(() => {});
   await loadRequests();
   closeModal();
   render();
@@ -502,6 +511,15 @@ async function approveRequest(reqId, note) {
     `✅ Permission approved by ${ME.name}`,
     `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`,
   );
+  fetch("/api/activity", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "message_posted",
+      actor: ME.name,
+      description: `${ME.name} approved ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
+      metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
+    }),
+  }).catch(() => {});
   await publishEvent("parental-agreement.approved", reqId, { title: req.title, approver: ME.name, child_id: req.child_id });
   await loadRequests();
   closeModal();
@@ -521,6 +539,15 @@ async function rejectRequest(reqId, note) {
     `❌ Permission denied by ${ME.name}`,
     `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`,
   );
+  fetch("/api/activity", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "message_posted",
+      actor: ME.name,
+      description: `${ME.name} denied ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
+      metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
+    }),
+  }).catch(() => {});
   await publishEvent("parental-agreement.rejected", reqId, { title: req.title, approver: ME.name, child_id: req.child_id });
   await loadRequests();
   closeModal();
@@ -829,6 +856,14 @@ window.openDetailModal_ = function(id) {
   if (req) openDetailModal(req);
 };
 
+// ─── Deep linking ─────────────────────────────────────────────────────────────
+function handleDeepLink() {
+  const requestId = new URLSearchParams(window.location.search).get("requestId");
+  if (!requestId) return;
+  const req = requests.find(r => r.id === requestId);
+  if (req) openDetailModal(req);
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 (async () => {
   await loadMembers();
@@ -837,6 +872,7 @@ window.openDetailModal_ = function(id) {
     await loadRequests();
   }
   render();
+  handleDeepLink();
 })();
 </script>
 </body>

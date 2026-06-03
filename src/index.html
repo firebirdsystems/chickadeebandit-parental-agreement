@@ -343,6 +343,7 @@ const ME      = window.__CURRENT_MEMBER ?? null;
 
 // ─── State ────────────────────────────────────────────────────────────────
 let members   = [];
+let memberMap = new Map();
 let requests  = [];
 let activeTab = "pending"; // adult: "pending" | "all" / child: "mine"
 
@@ -371,12 +372,14 @@ async function loadMembers() {
       { id: "demo-3", name: "Jordan", role: "child" },
       { id: "demo-4", name: "Casey",  role: "child" },
     ];
+    memberMap = new Map(members.map(m => [m.id, m]));
     return;
   }
   try {
     const res = await fetch(`${CONTEXT}?keys=family.members`);
     members = ((await res.json())["family.members"]) ?? [];
   } catch { members = []; }
+  memberMap = new Map(members.map(m => [m.id, m]));
 }
 
 async function loadRequests() {
@@ -408,7 +411,7 @@ async function loadRequests() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function memberName(id) {
-  return members.find(m => m.id === id)?.name ?? "Unknown";
+  return memberMap.get(id)?.name ?? "Unknown";
 }
 function mc(id) { return memberColor(id, members); }
 
@@ -459,28 +462,33 @@ async function createRequest(fields) {
     fields.from_datetime, fields.to_datetime,
     now, now,
   ]);
-  await logActivity(id, "created", `${ME.name} submitted a new permission request`);
-  await notify(
-    `✋ ${ME.name} is requesting permission`,
-    `"${fields.title}" — open Parental Agreement to review`,
-  );
-  fetch("/api/activity", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "message_posted",
-      actor: ME.name,
-      description: `${ME.name} is requesting permission: "${fields.title.slice(0, 60)}"`,
-      metadata: { deepLink: { appId: APP_ID, params: { requestId: id } } },
-    }),
-  }).catch(() => {});
-  await loadRequests();
+
+  requests = [{
+    id, child_id: ME.id, title: fields.title, description: fields.description,
+    from_datetime: fields.from_datetime, to_datetime: fields.to_datetime,
+    status: "pending", created_at: now, updated_at: now,
+    approved_by: null, approved_at: null, approval_note: "",
+  }, ...requests];
   closeModal();
   render();
+
+  Promise.all([
+    logActivity(id, "created", `${ME.name} submitted a new permission request`),
+    notify(`✋ ${ME.name} is requesting permission`, `"${fields.title}" — open Parental Agreement to review`),
+    fetch("/api/activity", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "message_posted",
+        actor: ME.name,
+        description: `${ME.name} is requesting permission: "${fields.title.slice(0, 60)}"`,
+        metadata: { deepLink: { appId: APP_ID, params: { requestId: id } } },
+      }),
+    }).catch(() => {}),
+  ]).catch(() => {});
 }
 
 async function updateRequest(reqId, fields) {
   const now = new Date().toISOString();
-  // Reset approval and re-notify parents
   await db(`UPDATE permissions SET
     title = ?, description = ?,
     from_datetime = ?, to_datetime = ?,
@@ -488,14 +496,20 @@ async function updateRequest(reqId, fields) {
     updated_at = ?
     WHERE id = ? AND status = 'pending'`,
   [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId]);
-  await logActivity(reqId, "updated", `${ME.name} updated the request — re-approval required`);
-  await notify(
-    `Permission request updated — re-approval required`,
-    `${ME.name} updated "${fields.title}". Please review the changes and re-approve.`,
-  );
-  await loadRequests();
+
+  const idx = requests.findIndex(r => r.id === reqId);
+  if (idx !== -1) requests[idx] = {
+    ...requests[idx], title: fields.title, description: fields.description,
+    from_datetime: fields.from_datetime, to_datetime: fields.to_datetime,
+    status: "pending", approved_by: null, approved_at: null, approval_note: "", updated_at: now,
+  };
   closeModal();
   render();
+
+  Promise.all([
+    logActivity(reqId, "updated", `${ME.name} updated the request — re-approval required`),
+    notify(`Permission request updated — re-approval required`, `${ME.name} updated "${fields.title}". Please review the changes and re-approve.`),
+  ]).catch(() => {});
 }
 
 async function approveRequest(reqId, note) {
@@ -506,24 +520,26 @@ async function approveRequest(reqId, note) {
     status = 'approved', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
     WHERE id = ?`,
   [ME.id, now, note, now, reqId]);
-  await logActivity(reqId, "approved", `${ME.name} approved the request${note ? `: "${note}"` : ""}`);
-  await notify(
-    `✅ Permission approved by ${ME.name}`,
-    `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`,
-  );
-  fetch("/api/activity", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "message_posted",
-      actor: ME.name,
-      description: `${ME.name} approved ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
-      metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
-    }),
-  }).catch(() => {});
-  await publishEvent("parental-agreement.approved", reqId, { title: req.title, approver: ME.name, child_id: req.child_id });
-  await loadRequests();
+
+  const idx = requests.findIndex(r => r.id === reqId);
+  if (idx !== -1) requests[idx] = { ...requests[idx], status: "approved", approved_by: ME.id, approved_at: now, approval_note: note, updated_at: now };
   closeModal();
   render();
+
+  Promise.all([
+    logActivity(reqId, "approved", `${ME.name} approved the request${note ? `: "${note}"` : ""}`),
+    notify(`✅ Permission approved by ${ME.name}`, `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`),
+    fetch("/api/activity", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "message_posted",
+        actor: ME.name,
+        description: `${ME.name} approved ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
+        metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
+      }),
+    }).catch(() => {}),
+    publishEvent("parental-agreement.approved", reqId, { title: req.title, approver: ME.name, child_id: req.child_id }),
+  ]).catch(() => {});
 }
 
 async function rejectRequest(reqId, note) {
@@ -534,24 +550,26 @@ async function rejectRequest(reqId, note) {
     status = 'rejected', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
     WHERE id = ?`,
   [ME.id, now, note, now, reqId]);
-  await logActivity(reqId, "rejected", `${ME.name} rejected the request${note ? `: "${note}"` : ""}`);
-  await notify(
-    `❌ Permission denied by ${ME.name}`,
-    `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`,
-  );
-  fetch("/api/activity", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "message_posted",
-      actor: ME.name,
-      description: `${ME.name} denied ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
-      metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
-    }),
-  }).catch(() => {});
-  await publishEvent("parental-agreement.rejected", reqId, { title: req.title, approver: ME.name, child_id: req.child_id });
-  await loadRequests();
+
+  const idx = requests.findIndex(r => r.id === reqId);
+  if (idx !== -1) requests[idx] = { ...requests[idx], status: "rejected", approved_by: ME.id, approved_at: now, approval_note: note, updated_at: now };
   closeModal();
   render();
+
+  Promise.all([
+    logActivity(reqId, "rejected", `${ME.name} rejected the request${note ? `: "${note}"` : ""}`),
+    notify(`❌ Permission denied by ${ME.name}`, `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`),
+    fetch("/api/activity", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "message_posted",
+        actor: ME.name,
+        description: `${ME.name} denied ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
+        metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
+      }),
+    }).catch(() => {}),
+    publishEvent("parental-agreement.rejected", reqId, { title: req.title, approver: ME.name, child_id: req.child_id }),
+  ]).catch(() => {});
 }
 
 async function cancelRequest(reqId) {
@@ -560,16 +578,18 @@ async function cancelRequest(reqId) {
   const now = new Date().toISOString();
   await db(`UPDATE permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
     [now, reqId, ME.id]);
-  await logActivity(reqId, "cancelled", `${ME.name} cancelled the request`);
-  if (req) {
-    await notify(
-      `Permission request cancelled`,
-      `${ME.name} cancelled the request for "${req.title}"`,
-    );
-  }
-  await loadRequests();
+
+  const idx = requests.findIndex(r => r.id === reqId);
+  if (idx !== -1) requests[idx] = { ...requests[idx], status: "cancelled", updated_at: now };
   closeModal();
   render();
+
+  if (req) {
+    Promise.all([
+      logActivity(reqId, "cancelled", `${ME.name} cancelled the request`),
+      notify(`Permission request cancelled`, `${ME.name} cancelled the request for "${req.title}"`),
+    ]).catch(() => {});
+  }
 }
 
 // ─── Modal ────────────────────────────────────────────────────────────────
@@ -678,8 +698,8 @@ window.submitDecision = async function(reqId, decision) {
 
 // ─── Detail modal ─────────────────────────────────────────────────────────
 function openDetailModal(req) {
-  const child       = members.find(m => m.id === req.child_id);
-  const approver    = req.approved_by ? members.find(m => m.id === req.approved_by) : null;
+  const child       = memberMap.get(req.child_id);
+  const approver    = req.approved_by ? memberMap.get(req.approved_by) : null;
   const meIsAdult   = isAdult(ME);
   const isMyRequest = ME?.id === req.child_id;
   const canEdit     = req.status === "pending" && isMyRequest;
@@ -761,7 +781,7 @@ window.closeModal     = closeModal;
 
 // ─── Render ───────────────────────────────────────────────────────────────
 function renderCard(req) {
-  const child       = members.find(m => m.id === req.child_id);
+  const child       = memberMap.get(req.child_id);
   const meIsAdult   = isAdult(ME);
   const needsAction = req.status === "pending" && meIsAdult;
 
@@ -866,11 +886,7 @@ function handleDeepLink() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 (async () => {
-  await loadMembers();
-  if (DB) {
-    await initDb();
-    await loadRequests();
-  }
+  await Promise.all([loadMembers(), DB ? loadRequests() : Promise.resolve()]);
   render();
   handleDeepLink();
 })();

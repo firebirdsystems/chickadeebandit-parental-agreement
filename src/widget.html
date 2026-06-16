@@ -111,7 +111,7 @@ async function load() {
   const [members, { rows }] = await Promise.all([
     loadMembers(),
     dbq(`SELECT id, child_id, title, from_datetime, to_datetime, status, created_at
-         FROM permissions
+         FROM app_parental_agreement__permissions
          WHERE status = 'pending'
          ORDER BY created_at ASC
          LIMIT 20`),

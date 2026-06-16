@@ -390,7 +390,7 @@ async function loadRequests() {
   if (meIsAdult) {
     // Adults see all non-cancelled requests, plus their own cancelled ones
     ({ rows } = await db(`
-      SELECT * FROM permissions
+      SELECT * FROM app_parental_agreement__permissions
       WHERE status != 'cancelled'
       ORDER BY
         CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
@@ -399,7 +399,7 @@ async function loadRequests() {
   } else {
     // Children see only their own requests
     ({ rows } = await db(`
-      SELECT * FROM permissions
+      SELECT * FROM app_parental_agreement__permissions
       WHERE child_id = ?
       ORDER BY
         CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
@@ -444,7 +444,7 @@ async function publishEvent(type, subjectId, payload = {}) {
 // ─── Activity log ─────────────────────────────────────────────────────────
 async function logActivity(permissionId, action, detail = "") {
   const id = crypto.randomUUID();
-  await db(`INSERT INTO activity (id, permission_id, actor_id, action, detail, created_at)
+  await db(`INSERT INTO app_parental_agreement__activity (id, permission_id, actor_id, action, detail, created_at)
             VALUES (?, ?, ?, ?, ?, ?)`,
     [id, permissionId, ME?.id ?? "system", action, detail, new Date().toISOString()]);
 }
@@ -453,7 +453,7 @@ async function logActivity(permissionId, action, detail = "") {
 async function createRequest(fields) {
   const id  = crypto.randomUUID();
   const now = new Date().toISOString();
-  await db(`INSERT INTO permissions (
+  await db(`INSERT INTO app_parental_agreement__permissions (
     id, child_id, title, description,
     from_datetime, to_datetime,
     status, created_at, updated_at
@@ -489,7 +489,7 @@ async function createRequest(fields) {
 
 async function updateRequest(reqId, fields) {
   const now = new Date().toISOString();
-  await db(`UPDATE permissions SET
+  await db(`UPDATE app_parental_agreement__permissions SET
     title = ?, description = ?,
     from_datetime = ?, to_datetime = ?,
     status = 'pending', approved_by = NULL, approved_at = NULL, approval_note = '',
@@ -516,7 +516,7 @@ async function approveRequest(reqId, note) {
   const req = requests.find(r => r.id === reqId);
   if (!req || req.status !== "pending") return;
   const now = new Date().toISOString();
-  await db(`UPDATE permissions SET
+  await db(`UPDATE app_parental_agreement__permissions SET
     status = 'approved', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
     WHERE id = ?`,
   [ME.id, now, note, now, reqId]);
@@ -546,7 +546,7 @@ async function rejectRequest(reqId, note) {
   const req = requests.find(r => r.id === reqId);
   if (!req || req.status !== "pending") return;
   const now = new Date().toISOString();
-  await db(`UPDATE permissions SET
+  await db(`UPDATE app_parental_agreement__permissions SET
     status = 'rejected', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
     WHERE id = ?`,
   [ME.id, now, note, now, reqId]);
@@ -576,7 +576,7 @@ async function cancelRequest(reqId) {
   if (!await hubConfirm({ message: "Cancel this permission request?", confirmLabel: "Cancel request" })) return;
   const req = requests.find(r => r.id === reqId);
   const now = new Date().toISOString();
-  await db(`UPDATE permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
+  await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
     [now, reqId, ME.id]);
 
   const idx = requests.findIndex(r => r.id === reqId);

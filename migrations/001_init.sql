@@ -1,5 +1,4 @@
-CREATE TABLE IF NOT EXISTS permissions (
-  household_id  UUID NOT NULL DEFAULT current_setting('app.household_id', true)::uuid,
+CREATE TABLE IF NOT EXISTS app_parental_agreement__permissions (
   id            TEXT NOT NULL,
   child_id      TEXT NOT NULL,
   title         TEXT NOT NULL,
@@ -12,16 +11,15 @@ CREATE TABLE IF NOT EXISTS permissions (
   approval_note TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL,
-  PRIMARY KEY (household_id, id)
+  PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS activity (
-  household_id  UUID NOT NULL DEFAULT current_setting('app.household_id', true)::uuid,
+CREATE TABLE IF NOT EXISTS app_parental_agreement__activity (
   id            TEXT NOT NULL,
   permission_id TEXT NOT NULL,
   actor_id      TEXT NOT NULL,
   action        TEXT NOT NULL,
   detail        TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL,
-  PRIMARY KEY (household_id, id)
+  PRIMARY KEY (id)
 );

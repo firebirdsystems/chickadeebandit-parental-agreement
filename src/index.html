@@ -426,7 +426,7 @@ function statusHtml(status) {
 
 // ─── Notifications ────────────────────────────────────────────────────────
 async function notify(title, body) {
-  await fetch("/api/notifications/send", {
+  await fetch(window.__NOTIFY_URL ?? "/api/notifications/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, body, url: `/run/${APP_ID}`, audience: "adults" }),
@@ -475,7 +475,7 @@ async function createRequest(fields) {
   Promise.all([
     logActivity(id, "created", `${ME.name} submitted a new permission request`),
     notify(`✋ ${ME.name} is requesting permission`, `"${fields.title}" — open Parental Agreement to review`),
-    fetch("/api/activity", {
+    fetch(window.__ACTIVITY_URL ?? "/api/activity", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: "message_posted",
@@ -529,7 +529,7 @@ async function approveRequest(reqId, note) {
   Promise.all([
     logActivity(reqId, "approved", `${ME.name} approved the request${note ? `: "${note}"` : ""}`),
     notify(`✅ Permission approved by ${ME.name}`, `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`),
-    fetch("/api/activity", {
+    fetch(window.__ACTIVITY_URL ?? "/api/activity", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: "message_posted",
@@ -559,7 +559,7 @@ async function rejectRequest(reqId, note) {
   Promise.all([
     logActivity(reqId, "rejected", `${ME.name} rejected the request${note ? `: "${note}"` : ""}`),
     notify(`❌ Permission denied by ${ME.name}`, `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`),
-    fetch("/api/activity", {
+    fetch(window.__ACTIVITY_URL ?? "/api/activity", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: "message_posted",

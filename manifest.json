@@ -24,6 +24,24 @@
     "requires_approval": false
   },
   "storage": "db",
+  "row_policies": {
+    "app_parental_agreement__permissions": {
+      "kind": "owner_only",
+      "member_column": "child_id",
+      "adults_bypass": true,
+      "member_can_update": false
+    },
+    "app_parental_agreement__activity": {
+      "kind": "owner_only",
+      "member_column": "actor_id",
+      "adults_bypass": true,
+      "member_can_update": false
+    }
+  },
+  "publish_acls": {
+    "parental-agreement.approved": { "require_role": "adult" },
+    "parental-agreement.rejected": { "require_role": "adult" }
+  },
   "publishes": [
     "parental-agreement.approved",
     "parental-agreement.rejected"

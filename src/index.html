@@ -494,8 +494,8 @@ async function updateRequest(reqId, fields) {
     from_datetime = ?, to_datetime = ?,
     status = 'pending', approved_by = NULL, approved_at = NULL, approval_note = '',
     updated_at = ?
-    WHERE id = ? AND status = 'pending'`,
-  [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId]);
+    WHERE id = ? AND child_id = ? AND status = 'pending'`,
+  [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId, ME.id]);
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = {

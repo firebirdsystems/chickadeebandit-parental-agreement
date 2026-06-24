@@ -38,4 +38,16 @@ describe("manifest.json", () => {
     expect(Array.isArray(manifest.data_access.reads)).toBe(true);
     expect(Array.isArray(manifest.data_access.writes)).toBe(true);
   });
+
+  it("declares row_policies for sensitive tables", () => {
+    expect(manifest.row_policies).toBeDefined();
+    expect(manifest.row_policies["app_parental_agreement__permissions"]).toBeDefined();
+    expect(manifest.row_policies["app_parental_agreement__activity"]).toBeDefined();
+  });
+
+  it("declares publish_acls for value-bearing events", () => {
+    expect(manifest.publish_acls).toBeDefined();
+    expect(manifest.publish_acls["parental-agreement.approved"]).toBeDefined();
+    expect(manifest.publish_acls["parental-agreement.rejected"]).toBeDefined();
+  });
 });

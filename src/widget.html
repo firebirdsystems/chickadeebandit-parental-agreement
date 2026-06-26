@@ -108,16 +108,24 @@ function fmtRelTime(iso) {
 }
 
 async function load() {
-  const [members, { rows }] = await Promise.all([
+  const [members, { rows }, { rows: decRows }] = await Promise.all([
     loadMembers(),
-    dbq(`SELECT id, child_id, title, from_datetime, to_datetime, status, created_at
+    dbq(`SELECT id, child_id, title, from_datetime, to_datetime, status, created_at, updated_at
          FROM app_parental_agreement__permissions
          WHERE status = 'pending'
          ORDER BY created_at ASC
          LIMIT 20`),
+    dbq(`SELECT permission_id, decided_at FROM app_parental_agreement__decisions`),
   ]);
 
-  const count = rows.length;
+  // Approval lives in the adult-only decisions table; a permissions row keeps
+  // DB status 'pending' even after a decision. A request is truly still pending
+  // only if it has no decision dated at/after its last edit.
+  const decisions = decRows ?? [];
+  const pending = rows.filter(r =>
+    !decisions.some(d => d.permission_id === r.id && d.decided_at >= r.updated_at));
+
+  const count = pending.length;
 
   const header = `
     <div class="header">
@@ -133,7 +141,7 @@ async function load() {
     </div>`;
   } else {
     body = `<div class="item-list">
-      ${rows.map(r => {
+      ${pending.map(r => {
         const who = members[r.child_id] ?? "Someone";
         const when = (() => {
           if (!r.from_datetime) return "";

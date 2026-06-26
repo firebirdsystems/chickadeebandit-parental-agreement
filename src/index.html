@@ -345,6 +345,7 @@ const ME      = window.__CURRENT_MEMBER ?? null;
 let members   = [];
 let memberMap = new Map();
 let requests  = [];
+let decisions = [];
 let activeTab = "pending"; // adult: "pending" | "all" / child: "mine"
 
 // ─── DB helper ────────────────────────────────────────────────────────────
@@ -382,31 +383,45 @@ async function loadMembers() {
   memberMap = new Map(members.map(m => [m.id, m]));
 }
 
+// Effective approval status is DERIVED from the adult-only decisions table, not
+// from the (child-writable) permissions row. A child can edit/cancel their own
+// request but cannot forge approval. Only the latest decision made at/after the
+// request's last edit counts, so any edit resets approval back to pending.
+function deriveStatus(req) {
+  if (req.status === "cancelled") {
+    return { ...req, status: "cancelled", approved_by: null, approved_at: null, approval_note: "" };
+  }
+  const latest = decisions
+    .filter(d => d.permission_id === req.id && d.decided_at >= req.updated_at)
+    .sort((a, b) => (a.decided_at < b.decided_at ? 1 : -1))[0];
+  if (latest) {
+    return { ...req, status: latest.decision, approved_by: latest.decided_by, approved_at: latest.decided_at, approval_note: latest.note };
+  }
+  return { ...req, status: "pending", approved_by: null, approved_at: null, approval_note: "" };
+}
+
+function statusRank(s) { return s === "pending" ? 0 : s === "approved" ? 1 : 2; }
+
 async function loadRequests() {
   if (!DB || !ME) return;
   const meIsAdult = isAdult(ME);
 
-  let rows;
-  if (meIsAdult) {
-    // Adults see all non-cancelled requests, plus their own cancelled ones
-    ({ rows } = await db(`
-      SELECT * FROM app_parental_agreement__permissions
-      WHERE status != 'cancelled'
-      ORDER BY
-        CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
-        from_datetime ASC
-    `));
-  } else {
-    // Children see only their own requests
-    ({ rows } = await db(`
-      SELECT * FROM app_parental_agreement__permissions
-      WHERE child_id = ?
-      ORDER BY
-        CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
-        from_datetime ASC
-    `, [ME.id]));
-  }
-  requests = rows ?? [];
+  const permSql = meIsAdult
+    ? [`SELECT * FROM app_parental_agreement__permissions WHERE status != 'cancelled'`, []]
+    : [`SELECT * FROM app_parental_agreement__permissions WHERE child_id = ?`, [ME.id]];
+
+  const [{ rows: permRows }, { rows: decRows }] = await Promise.all([
+    db(permSql[0], permSql[1]),
+    db(`SELECT * FROM app_parental_agreement__decisions`),
+  ]);
+
+  decisions = decRows ?? [];
+  requests = (permRows ?? [])
+    .map(deriveStatus)
+    .sort((a, b) =>
+      statusRank(a.status) !== statusRank(b.status)
+        ? statusRank(a.status) - statusRank(b.status)
+        : (a.from_datetime < b.from_datetime ? -1 : a.from_datetime > b.from_datetime ? 1 : 0));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -489,20 +504,22 @@ async function createRequest(fields) {
 
 async function updateRequest(reqId, fields) {
   const now = new Date().toISOString();
+  // The child owns and may edit/cancel their own pending request (owner_only,
+  // member_can_update defaults true). Bumping updated_at supersedes any prior
+  // approval decision, so the request reverts to pending and parents re-approve.
   await db(`UPDATE app_parental_agreement__permissions SET
     title = ?, description = ?,
     from_datetime = ?, to_datetime = ?,
-    status = 'pending', approved_by = NULL, approved_at = NULL, approval_note = '',
-    updated_at = ?
+    status = 'pending', updated_at = ?
     WHERE id = ? AND child_id = ? AND status = 'pending'`,
   [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId, ME.id]);
 
   const idx = requests.findIndex(r => r.id === reqId);
-  if (idx !== -1) requests[idx] = {
+  if (idx !== -1) requests[idx] = deriveStatus({
     ...requests[idx], title: fields.title, description: fields.description,
     from_datetime: fields.from_datetime, to_datetime: fields.to_datetime,
-    status: "pending", approved_by: null, approved_at: null, approval_note: "", updated_at: now,
-  };
+    status: "pending", updated_at: now,
+  });
   closeModal();
   render();
 
@@ -512,17 +529,28 @@ async function updateRequest(reqId, fields) {
   ]).catch(() => {});
 }
 
-async function approveRequest(reqId, note) {
+async function recordDecision(reqId, decision, note) {
   const req = requests.find(r => r.id === reqId);
-  if (!req || req.status !== "pending") return;
-  const now = new Date().toISOString();
-  await db(`UPDATE app_parental_agreement__permissions SET
-    status = 'approved', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
-    WHERE id = ?`,
-  [ME.id, now, note, now, reqId]);
+  if (!req || req.status !== "pending") return null;
+  const now   = new Date().toISOString();
+  const decId = crypto.randomUUID();
+  // Adult-only INSERT (server enforces via the decisions table's adult_writable
+  // policy); the permissions row is never touched, so editing it later (which
+  // bumps updated_at) automatically supersedes this decision.
+  await db(`INSERT INTO app_parental_agreement__decisions
+    (id, permission_id, child_id, decision, note, decided_by, decided_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [decId, reqId, req.child_id, decision, note, ME.id, now]);
 
+  decisions.push({ id: decId, permission_id: reqId, child_id: req.child_id, decision, note, decided_by: ME.id, decided_at: now });
   const idx = requests.findIndex(r => r.id === reqId);
-  if (idx !== -1) requests[idx] = { ...requests[idx], status: "approved", approved_by: ME.id, approved_at: now, approval_note: note, updated_at: now };
+  if (idx !== -1) requests[idx] = deriveStatus(requests[idx]);
+  return req;
+}
+
+async function approveRequest(reqId, note) {
+  const req = await recordDecision(reqId, "approved", note);
+  if (!req) return;
   closeModal();
   render();
 
@@ -543,16 +571,8 @@ async function approveRequest(reqId, note) {
 }
 
 async function rejectRequest(reqId, note) {
-  const req = requests.find(r => r.id === reqId);
-  if (!req || req.status !== "pending") return;
-  const now = new Date().toISOString();
-  await db(`UPDATE app_parental_agreement__permissions SET
-    status = 'rejected', approved_by = ?, approved_at = ?, approval_note = ?, updated_at = ?
-    WHERE id = ?`,
-  [ME.id, now, note, now, reqId]);
-
-  const idx = requests.findIndex(r => r.id === reqId);
-  if (idx !== -1) requests[idx] = { ...requests[idx], status: "rejected", approved_by: ME.id, approved_at: now, approval_note: note, updated_at: now };
+  const req = await recordDecision(reqId, "rejected", note);
+  if (!req) return;
   closeModal();
   render();
 

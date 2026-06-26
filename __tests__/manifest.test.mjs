@@ -41,8 +41,15 @@ describe("manifest.json", () => {
 
   it("declares row_policies for sensitive tables", () => {
     expect(manifest.row_policies).toBeDefined();
-    expect(manifest.row_policies["app_parental_agreement__permissions"]).toBeDefined();
-    expect(manifest.row_policies["app_parental_agreement__activity"]).toBeDefined();
+    // Row-policy keys must be the table name WITHOUT the app_<id>__ prefix — the
+    // hub looks them up by the prefix-stripped name, so a prefixed key is a
+    // silently dead (unenforced) policy.
+    expect(manifest.row_policies["permissions"]).toBeDefined();
+    expect(manifest.row_policies["decisions"]).toBeDefined();
+    expect(manifest.row_policies["activity"]).toBeDefined();
+    for (const key of Object.keys(manifest.row_policies)) {
+      expect(key.startsWith("app_parental_agreement__")).toBe(false);
+    }
   });
 
   it("declares publish_acls for value-bearing events", () => {

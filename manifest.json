@@ -1,7 +1,7 @@
 {
   "id": "parental-agreement",
   "name": "Parental Agreement",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Kids submit permission requests — staying out late, attending events, overnight trips. Parents are notified and must approve. Any edit resets approval and re-notifies parents.",
   "entrypoint": "index.html",
   "runtime": "static",
@@ -25,13 +25,16 @@
   },
   "storage": "db",
   "row_policies": {
-    "app_parental_agreement__permissions": {
+    "permissions": {
       "kind": "owner_only",
       "member_column": "child_id",
-      "adults_bypass": true,
-      "member_can_update": false
+      "adults_bypass": true
     },
-    "app_parental_agreement__activity": {
+    "decisions": {
+      "kind": "adult_writable",
+      "member_read_column": "child_id"
+    },
+    "activity": {
       "kind": "owner_only",
       "member_column": "actor_id",
       "adults_bypass": true,

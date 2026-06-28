@@ -621,6 +621,9 @@ function openModal(html) {
   modalEl.innerHTML = `<div class="modal">${html}</div>`;
   modalEl.addEventListener("click", e => { if (e.target === modalEl) closeModal(); });
   document.body.appendChild(modalEl);
+  // Programmatic focus works inside cross-origin iframes (unlike the autofocus
+  // attribute, which the browser blocks) because it rides the user's click gesture.
+  modalEl.querySelector("[data-autofocus]")?.focus();
 }
 function closeModal() { modalEl?.remove(); modalEl = null; }
 
@@ -634,7 +637,7 @@ function openRequestForm(req = null) {
     <div class="form-group">
       <label>What do you want to do?</label>
       <input id="f-title" type="text" value="${esc(req?.title ?? "")}"
-        placeholder="Stay out after curfew, go to a concert…" autofocus />
+        placeholder="Stay out after curfew, go to a concert…" data-autofocus />
     </div>
     <div class="form-group">
       <label>Details <span style="font-weight:400;text-transform:none">(optional)</span></label>
@@ -696,7 +699,7 @@ function openDecisionModal(req, decision) {
       <label>Note <span style="font-weight:400;text-transform:none">(optional)</span></label>
       <input id="d-note" type="text"
         placeholder="${isApprove ? "Be home by midnight, text when you arrive…" : "Reason for denying…"}"
-        autofocus />
+        data-autofocus />
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>

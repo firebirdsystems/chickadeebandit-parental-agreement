@@ -339,6 +339,7 @@ import { STATUS_INFO, formatDateTime, localToISO, isoToLocal } from "./logic.js"
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
 const APP_ID  = window.__APP_ID      ?? "parental-agreement";
+const APPEND_RECORD = window.__APPEND_RECORD_URL ?? `/run/${APP_ID}/api/append-record`;
 const ME      = window.__CURRENT_MEMBER ?? null;
 
 // ─── State ────────────────────────────────────────────────────────────────
@@ -357,6 +358,17 @@ async function db(sql, params = []) {
     body: JSON.stringify({ sql, params }),
   });
   return res.json();
+}
+
+async function appendRecord(name, data) {
+  const res = await fetch(`${APPEND_RECORD}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.error) throw new Error(json.error || "Append failed");
+  return json;
 }
 
 // ─── DB init ──────────────────────────────────────────────────────────────
@@ -458,10 +470,7 @@ async function publishEvent(type, subjectId, payload = {}) {
 
 // ─── Activity log ─────────────────────────────────────────────────────────
 async function logActivity(permissionId, action, detail = "") {
-  const id = crypto.randomUUID();
-  await db(`INSERT INTO app_parental_agreement__activity (id, permission_id, actor_id, action, detail, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, permissionId, ME?.id ?? "system", action, detail, new Date().toISOString()]);
+  await appendRecord("activity", { permission_id: permissionId, action, detail });
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────
@@ -533,16 +542,11 @@ async function recordDecision(reqId, decision, note) {
   const req = requests.find(r => r.id === reqId);
   if (!req || req.status !== "pending") return null;
   const now   = new Date().toISOString();
-  const decId = crypto.randomUUID();
-  // Adult-only INSERT (server enforces via the decisions table's adult_writable
-  // policy); the permissions row is never touched, so editing it later (which
-  // bumps updated_at) automatically supersedes this decision.
-  await db(`INSERT INTO app_parental_agreement__decisions
-    (id, permission_id, child_id, decision, note, decided_by, decided_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [decId, reqId, req.child_id, decision, note, ME.id, now]);
+  // Adult-only append endpoint derives decided_by/decided_at and keeps direct
+  // app SQL from mutating the decision trail.
+  const result = await appendRecord("decisions", { permission_id: reqId, child_id: req.child_id, decision, note });
 
-  decisions.push({ id: decId, permission_id: reqId, child_id: req.child_id, decision, note, decided_by: ME.id, decided_at: now });
+  decisions.push({ id: result.id, permission_id: reqId, child_id: req.child_id, decision, note, decided_by: ME.id, decided_at: result.created_at ?? now });
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = deriveStatus(requests[idx]);
   return req;

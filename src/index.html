@@ -658,7 +658,7 @@ function openRequestForm(req = null) {
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitForm('${req?.id ?? ""}')">
+      <button class="btn btn-primary" data-req-id="${esc(req?.id ?? "")}" onclick="submitForm(this.dataset.reqId)">
         ${isEdit ? "Save Changes" : "Submit Request"}
       </button>
     </div>
@@ -708,7 +708,8 @@ function openDecisionModal(req, decision) {
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn ${isApprove ? "btn-success" : "btn-danger"}"
-        onclick="submitDecision('${req.id}', '${decision}')">
+        data-req-id="${esc(req.id)}" data-decision="${esc(decision)}"
+        onclick="submitDecision(this.dataset.reqId, this.dataset.decision)">
         ${isApprove ? "Approve" : "Deny"}
       </button>
     </div>
@@ -750,7 +751,7 @@ function openDetailModal(req) {
         <h3>${esc(req.title)}</h3>
         <div style="margin-top:5px">${statusHtml(req.status)}</div>
       </div>
-      ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="openEditForm('${req.id}')">Edit</button>` : ""}
+      ${canEdit ? `<button class="btn btn-ghost btn-sm" data-req-id="${esc(req.id)}" onclick="openEditForm(this.dataset.reqId)">Edit</button>` : ""}
     </div>
 
     ${req.description ? `<p class="detail-desc">${esc(req.description)}</p>` : ""}
@@ -781,10 +782,10 @@ function openDetailModal(req) {
 
     <div class="modal-actions">
       ${canDecide ? `
-        <button class="btn btn-success" onclick="openDecisionModal_('${req.id}', 'approve')">✓ Approve</button>
-        <button class="btn btn-danger"  onclick="openDecisionModal_('${req.id}', 'reject')">✗ Deny</button>
+        <button class="btn btn-success" data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'approve')">✓ Approve</button>
+        <button class="btn btn-danger"  data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'reject')">✗ Deny</button>
       ` : ""}
-      ${canCancel ? `<button class="btn btn-ghost btn-sm" onclick="cancelRequest('${req.id}')">Cancel Request</button>` : ""}
+      ${canCancel ? `<button class="btn btn-ghost btn-sm" data-req-id="${esc(req.id)}" onclick="cancelRequest(this.dataset.reqId)">Cancel Request</button>` : ""}
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
     </div>
   `);
@@ -813,7 +814,7 @@ function renderCard(req) {
   const needsAction = req.status === "pending" && meIsAdult;
 
   return `
-    <div class="request-card ${needsAction ? "needs-action" : ""}" onclick="openDetailModal_('${req.id}')">
+    <div class="request-card ${needsAction ? "needs-action" : ""}" data-req-id="${esc(req.id)}" onclick="openDetailModal_(this.dataset.reqId)">
       <div class="request-main">
         <div class="request-title">${esc(req.title)}</div>
         <div class="request-who">

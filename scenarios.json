@@ -1,0 +1,68 @@
+{
+  "scenarios": [
+    {
+      "name": "a child sees only their own permission and decision rows; another child sees neither, while an adult sees all",
+      "members": { "parent": "adult", "childA": "child", "childB": "child" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__permissions (id, child_id, title, from_datetime, to_datetime, status, created_at, updated_at) VALUES ('p1', ?, 'Sleepover', '2026-01-10T18:00:00Z', '2026-01-11T10:00:00Z', 'approved', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["{{childA}}"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__decisions (id, permission_id, child_id, decision, decided_by, decided_at) VALUES ('d1', 'p1', ?, 'approved', ?, '2026-01-02T00:00:00Z')",
+          "params": ["{{childA}}", "{{parent}}"]
+        },
+        {
+          "action": "db",
+          "as": "childA",
+          "sql": "SELECT id FROM app_parental_agreement__permissions",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "p1" }] }
+        },
+        {
+          "action": "db",
+          "as": "childB",
+          "sql": "SELECT id FROM app_parental_agreement__permissions",
+          "expect": { "status": 200, "rowCount": 0 }
+        },
+        {
+          "action": "db",
+          "as": "childA",
+          "sql": "SELECT id, decision FROM app_parental_agreement__decisions",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "d1" }] }
+        },
+        {
+          "action": "db",
+          "as": "childB",
+          "sql": "SELECT id FROM app_parental_agreement__decisions",
+          "expect": { "status": 200, "rowCount": 0 }
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT id FROM app_parental_agreement__decisions",
+          "expect": { "status": 200, "rowCount": 1 }
+        }
+      ]
+    },
+    {
+      "name": "the decisions ledger is endpoint-only: even an adult cannot write it directly via app SQL",
+      "members": { "parent": "adult", "childA": "child" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__permissions (id, child_id, title, from_datetime, to_datetime, status, created_at, updated_at) VALUES ('p1', ?, 'Concert', '2026-01-10T18:00:00Z', '2026-01-11T00:00:00Z', 'pending', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["{{childA}}"]
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "INSERT INTO app_parental_agreement__decisions (id, permission_id, child_id, decision, decided_by, decided_at) VALUES ('d1', 'p1', ?, 'approved', ?, '2026-01-02T00:00:00Z')",
+          "params": ["{{childA}}", "{{parent}}"],
+          "expect": { "status": 403, "errorIncludes": "endpoint" }
+        }
+      ]
+    }
+  ]
+}

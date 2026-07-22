@@ -1,5 +1,6 @@
 {
   "id": "parental-agreement",
+  "contexts": ["household", "shared_space"],
   "name": "Parental Agreement",
   "version": "1.1.0",
   "description": "Kids submit permission requests — staying out late, attending events, overnight trips. Parents are notified and must approve. Any edit resets approval and re-notifies parents.",

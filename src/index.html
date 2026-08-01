@@ -324,6 +324,13 @@
       color: var(--muted);
     }
     .role-tag.adult { background: var(--accent-light); color: var(--accent); }
+    .search-row { margin-bottom: 12px; }
+    .search-input {
+      width: 100%; border: 1.5px solid var(--border-mid, var(--border, #d1d5db));
+      border-radius: 8px; padding: 9px 11px; font: inherit;
+      background: var(--surface, var(--card, #fff)); color: var(--text, inherit);
+    }
+    .search-input:focus { outline: none; border-color: var(--accent, #6366f1); }
   </style>
   <base href="/run/parental-agreement/" />
 </head>
@@ -333,8 +340,8 @@
 </div>
 
 <script type="module">
-import { memberColor, initial, esc, isAdult, hubConfirm } from "/hub-sdk.js";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal } from "./logic.js";
+import { memberColor, initial, esc, isAdult, hubConfirm, searchMatch } from "/hub-sdk.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
@@ -348,6 +355,7 @@ let memberMap = new Map();
 let requests  = [];
 let decisions = [];
 let activeTab = "pending"; // adult: "pending" | "all" / child: "mine"
+let searchQ = "";       // in-app search (see logic.js searchableFields)
 
 // ─── DB helper ────────────────────────────────────────────────────────────
 async function db(sql, params = []) {
@@ -831,6 +839,16 @@ function renderCard(req) {
   `;
 }
 
+// render() rewrites the whole view, so put the caret back after typing.
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "search") return;
+  searchQ = e.target.value;
+  const caret = e.target.selectionStart;
+  render();
+  const next = document.getElementById("search");
+  if (next) { next.focus(); next.setSelectionRange(caret, caret); }
+});
+
 function render() {
   if (!ME) {
     document.getElementById("root").innerHTML = `<div class="empty">Please log in to use Parental Agreement.</div>`;
@@ -850,9 +868,12 @@ function renderAdultView() {
   const pending  = requests.filter(r => r.status === "pending");
   const resolved = requests.filter(r => r.status !== "pending");
 
-  const list = activeTab === "pending" ? pending : resolved;
+  const scoped = activeTab === "pending" ? pending : resolved;
+  const list = searchQ ? scoped.filter(r => searchMatch(searchQ, searchableFields(r))) : scoped;
   const listHtml = list.length === 0
-    ? `<div class="empty">${activeTab === "pending" ? "No pending requests — all caught up." : "No resolved requests yet."}</div>`
+    ? (searchQ
+      ? `<div class="empty">No requests match "${esc(searchQ)}".</div>`
+      : `<div class="empty">${activeTab === "pending" ? "No pending requests — all caught up." : "No resolved requests yet."}</div>`)
     : list.map(r => renderCard(r)).join("");
 
   document.getElementById("root").innerHTML = `
@@ -872,14 +893,18 @@ function renderAdultView() {
       </button>
     </div>
 
+    ${requests.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search requests…" aria-label="Search requests" value="${esc(searchQ)}" /></div>` : ""}
     <div>${listHtml}</div>
   `;
 }
 
 function renderChildView() {
-  const active   = requests.filter(r => r.status !== "cancelled");
+  const scoped   = requests.filter(r => r.status !== "cancelled");
+  const active   = searchQ ? scoped.filter(r => searchMatch(searchQ, searchableFields(r))) : scoped;
   const listHtml = active.length === 0
-    ? `<div class="empty">You haven't submitted any requests yet. Tap + New Request to ask for permission.</div>`
+    ? (searchQ
+      ? `<div class="empty">No requests match "${esc(searchQ)}".</div>`
+      : `<div class="empty">You haven't submitted any requests yet. Tap + New Request to ask for permission.</div>`)
     : active.map(r => renderCard(r)).join("");
 
   document.getElementById("root").innerHTML = `
@@ -893,6 +918,7 @@ function renderChildView() {
         onclick="openNewRequest()">+ New Request</button>
     </header>
 
+    ${requests.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search requests…" aria-label="Search requests" value="${esc(searchQ)}" /></div>` : ""}
     <div>${listHtml}</div>
   `;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal } from "../src/logic.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields } from "../src/logic.js";
 
 // ── STATUS_INFO ───────────────────────────────────────────────────────────────
 
@@ -69,5 +69,13 @@ describe("isoToLocal", () => {
     const iso   = localToISO(local);
     const back  = isoToLocal(iso);
     expect(back).toBe(local);
+  });
+});
+
+describe("searchableFields", () => {
+  it("matches on the ask and the decision note", () => {
+    const fields = searchableFields({ title: "Sleepover", description: "at Kit's on Friday", note: "ok if home by 10" });
+    expect(fields).toContain("at Kit's on Friday");
+    expect(fields).toContain("ok if home by 10");
   });
 });

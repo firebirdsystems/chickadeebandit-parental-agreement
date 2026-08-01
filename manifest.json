@@ -25,6 +25,32 @@
     "requires_approval": false
   },
   "storage": "db",
+    "member_references": {
+      "permissions": [
+        {
+          "column": "child_id",
+          "on_removed": "keep"
+        },
+        {
+          "column": "approved_by",
+          "on_removed": "keep"
+        }
+      ],
+      "decisions": [
+        {
+          "column": "child_id",
+          "on_removed": "keep"
+        },
+        {
+          "column": "decided_by",
+          "on_removed": "keep"
+        }
+      ],
+      "activity": {
+        "column": "actor_id",
+        "on_removed": "keep"
+      }
+    },
   "row_policies": {
     "permissions": {
       "kind": "owner_only",
@@ -41,7 +67,12 @@
       "member_column": "actor_id",
       "adults_bypass": true,
       "member_can_update": false,
-      "endpoint_writes_only": true
+      "endpoint_writes_only": true,
+      "retain_days": {
+        "default": 730,
+        "timestamp_column": "created_at",
+        "override_key": "activity_history"
+      }
     }
   },
   "append_only_records": {

@@ -25,6 +25,7 @@
     "requires_approval": false
   },
   "storage": "db",
+  "db_plaintext_columns": ["from_datetime", "to_datetime", "decision"],
     "member_references": {
       "permissions": [
         {
@@ -129,6 +130,21 @@
   ],
   "nav": {
     "label": "Permissions"
+  },
+  "agenda": {
+    "kind": "reminder",
+    "label": "Permission",
+    "source": {
+      "kind": "sql",
+      "query": "SELECT p.id AS id, p.title AS title, NULLIF(p.description, '') AS subtitle, p.from_datetime AS when_at, p.child_id AS member_id FROM app_parental_agreement__permissions p JOIN app_parental_agreement__decisions d ON d.permission_id = p.id AND d.decision = 'approved' AND d.decided_at >= p.updated_at WHERE substr(p.from_datetime, 1, 10) = :today AND p.status != 'cancelled' GROUP BY p.id ORDER BY p.from_datetime LIMIT 20"
+    }
+  },
+  "glance": {
+    "source": {
+      "kind": "sql",
+      "query": "SELECT COUNT(*) AS n FROM app_parental_agreement__permissions WHERE status = 'pending' LIMIT 1"
+    },
+    "display": { "template": "badge", "count": "n", "label": "permission requests waiting", "severity": "warn" }
   },
   "widget": {
     "label": "Permissions",

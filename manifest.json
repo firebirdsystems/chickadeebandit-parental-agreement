@@ -25,6 +25,9 @@
     "requires_approval": false
   },
   "storage": "db",
+  "preload": {
+    "decisions": {"sql": "SELECT * FROM app_parental_agreement__decisions"}
+  },
   "db_plaintext_columns": ["from_datetime", "to_datetime", "decision"],
     "member_references": {
       "permissions": [

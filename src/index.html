@@ -507,15 +507,17 @@ async function createRequest(fields) {
   Promise.all([
     logActivity(id, "created", `${ME.name} submitted a new permission request`),
     notify(`✋ ${ME.name} is requesting permission`, `"${fields.title}" — open Parental Agreement to review`),
-    fetch(window.__ACTIVITY_URL ?? "/api/activity", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "message_posted",
-        actor: ME.name,
-        description: `${ME.name} is requesting permission: "${fields.title.slice(0, 60)}"`,
-        metadata: { deepLink: { appId: APP_ID, params: { requestId: id } } },
-      }),
-    }).catch(() => {}),
+    // No activity-feed write here or at the two sibling sites below. That POST
+    // used "message_posted", which is not one of the hub's own ActivityType
+    // values a caller may write (CALLER_ALLOWED_ACTIVITY_TYPES) — the near
+    // neighbour, conversation_message_posted, means a Household message and is
+    // wired to the bell's Messages section, which a permission request is not.
+    // So the hub refused every call with a 403 and no household ever saw an
+    // entry; a fetch does not reject on 4xx, so the .catch() hid it. It also
+    // sent an `actor` the hub ignores, resolving that from the session instead.
+    //
+    // This app's own logActivity() is a different sink — it writes the request's
+    // in-app audit trail — and is unaffected.
   ]).catch(() => {});
 }
 
@@ -569,15 +571,6 @@ async function approveRequest(reqId, note) {
   Promise.all([
     logActivity(reqId, "approved", `${ME.name} approved the request${note ? `: "${note}"` : ""}`),
     notify(`✅ Permission approved by ${ME.name}`, `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`),
-    fetch(window.__ACTIVITY_URL ?? "/api/activity", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "message_posted",
-        actor: ME.name,
-        description: `${ME.name} approved ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
-        metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
-      }),
-    }).catch(() => {}),
     publishEvent("parental-agreement.approved", reqId, { title: req.title, approver: ME.name, child_id: req.child_id }),
   ]).catch(() => {});
 }
@@ -591,15 +584,6 @@ async function rejectRequest(reqId, note) {
   Promise.all([
     logActivity(reqId, "rejected", `${ME.name} rejected the request${note ? `: "${note}"` : ""}`),
     notify(`❌ Permission denied by ${ME.name}`, `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`),
-    fetch(window.__ACTIVITY_URL ?? "/api/activity", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "message_posted",
-        actor: ME.name,
-        description: `${ME.name} denied ${memberName(req.child_id)}'s request: "${req.title.slice(0, 60)}"`,
-        metadata: { deepLink: { appId: APP_ID, params: { requestId: reqId } } },
-      }),
-    }).catch(() => {}),
     publishEvent("parental-agreement.rejected", reqId, { title: req.title, approver: ME.name, child_id: req.child_id }),
   ]).catch(() => {});
 }

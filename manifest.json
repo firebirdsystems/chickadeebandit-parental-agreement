@@ -26,7 +26,7 @@
   },
   "storage": "db",
   "preload": {
-    "decisions": {"sql": "SELECT * FROM app_parental_agreement__decisions"}
+    "decisions": {"sql": "SELECT d.* FROM app_parental_agreement__decisions d JOIN app_parental_agreement__permissions p ON p.id = d.permission_id AND d.decided_at >= p.updated_at"}
   },
   "db_plaintext_columns": ["from_datetime", "to_datetime", "decision"],
     "member_references": {

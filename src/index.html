@@ -430,9 +430,24 @@ async function loadRequests() {
     ? [`SELECT * FROM app_parental_agreement__permissions WHERE status != 'cancelled'`, []]
     : [`SELECT * FROM app_parental_agreement__permissions WHERE child_id = ?`, [ME.id]];
 
+  // Decisions are scoped to the ones deriveStatus() can actually use: those
+  // attached to a permission this viewer may read, made at or after that
+  // request's last edit. Every other decision row — one per superseded
+  // approval, and a request re-edited five times leaves five behind — was being
+  // downloaded and decrypted on every launch to be filtered straight back out.
+  //
+  // One statement serves both personas because the rewriter applies each
+  // table's own policy to the join: an adult reads all, while a child gets
+  // `p.child_id = ?` added to the ON clause AND `d.child_id = ?` to the WHERE.
+  // A JOIN, not `permission_id IN (SELECT ...)`: the rewriter fails closed on a
+  // governed table named only inside a subquery.
+  //
+  // NB this trims rows RETURNED, not rows READ — the plan still walks the
+  // decisions table. Bounding the read itself needs a time window, which would
+  // change which stale requests the Pending badge counts, so it is left alone.
   const [{ rows: permRows }, { rows: decRows }] = await Promise.all([
     db(permSql[0], permSql[1]),
-    db(`SELECT * FROM app_parental_agreement__decisions`),
+    db(`SELECT d.* FROM app_parental_agreement__decisions d JOIN app_parental_agreement__permissions p ON p.id = d.permission_id AND d.decided_at >= p.updated_at`),
   ]);
 
   decisions = decRows ?? [];

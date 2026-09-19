@@ -17,10 +17,10 @@
       --accent:       var(--hub-primary, #111827);
       --accent-fg:    var(--hub-primary-fg, #ffffff);
       --accent-hover: var(--hub-primary-hover, #374151);
-      --accent-light: #f3f4f6;
-      --green: #16a34a; --green-light: #dcfce7;
-      --amber: #d97706; --amber-light: #fef3c7;
-      --red: #dc2626;   --red-light: #fee2e2;
+      --accent-light: var(--bg);
+      --green: var(--hub-tint-success-fg, #16a34a); --green-light: var(--hub-tint-success, #dcfce7);
+      --amber: var(--hub-tint-warning-fg, #d97706); --amber-light: var(--hub-tint-warning, #fef3c7);
+      --red: var(--hub-tint-danger-fg, #dc2626);   --red-light: var(--hub-tint-danger, #fee2e2);
       --radius:       var(--hub-radius, 0.5rem);
       --shadow:       0 1px 3px rgba(0,0,0,.07);
     }
@@ -44,7 +44,7 @@
       padding: 16px 20px;
       background: var(--accent);
       border-radius: var(--radius);
-      color: white;
+      color: var(--accent-fg);
     }
     header h1 { font-size: 1.2rem; font-weight: 700; }
     header .sub { font-size: 0.8rem; opacity: .75; margin-top: 2px; }
@@ -63,7 +63,7 @@
       transition: opacity .15s;
     }
     .btn:disabled { opacity: .5; cursor: default; }
-    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary { background: var(--accent); color: var(--accent-fg); }
     .btn-primary:hover:not(:disabled) { opacity: .88; }
     .btn-ghost { background: transparent; color: var(--muted); border: 1.5px solid var(--border); }
     .btn-ghost:hover { border-color: var(--text); color: var(--text); }
@@ -98,7 +98,7 @@
       justify-content: center;
       gap: 6px;
     }
-    .tab.active { background: white; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
     .tab-badge {
       background: var(--amber);
       color: white;
@@ -126,7 +126,7 @@
       transition: border-color .15s, box-shadow .15s;
     }
     .request-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(3,105,161,.12); }
-    .request-card.needs-action { border-color: var(--amber); background: #fffbeb; }
+    .request-card.needs-action { border-color: var(--amber); background: var(--hub-tint-warning, #fffbeb); }
 
     .request-main { flex: 1; min-width: 0; }
     .request-title { font-weight: 600; font-size: 1rem; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -186,7 +186,7 @@
       .modal-backdrop { align-items: center; padding: 20px; }
     }
     .modal {
-      background: white;
+      background: var(--card);
       border-radius: var(--radius) var(--radius) 0 0;
       width: 100%;
       max-width: 500px;
@@ -219,7 +219,7 @@
       font-family: inherit;
       outline: none;
       transition: border-color .15s;
-      background: white;
+      background: var(--card);
     }
     .form-group input:focus,
     .form-group select:focus,
@@ -293,12 +293,12 @@
       padding: 10px 14px;
       font-size: 0.88rem;
       margin-bottom: 4px;
-      color: #14532d;
+      color: var(--hub-tint-success-fg, #14532d);
     }
     .approval-note-box.rejected {
       background: var(--red-light);
       border-color: var(--red);
-      color: #7f1d1d;
+      color: var(--hub-tint-danger-fg, #7f1d1d);
     }
     .approval-note-box .by { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
 

@@ -1,6 +1,6 @@
 # Parental Agreement
 
-A [Chickadee Bandit](http://chickadeebandit.com) app.
+A [Chickadee Bandit](https://chickadeebandit.com/app-library/parental-agreement) app.
 
 Kids submit permission requests — staying out late, attending events, overnight trips. Parents are notified and must approve. Any edit resets approval and re-notifies parents.
 

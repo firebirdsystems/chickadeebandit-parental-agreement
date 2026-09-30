@@ -63,6 +63,94 @@
           "expect": { "status": 403, "errorIncludes": "endpoint" }
         }
       ]
+    },
+    {
+      "name": "in a shared space only the steward reaches every member's permission requests; a participant adult reaches only their own",
+      "context": "shared_space",
+      "members": { "a": "adult", "b": "adult", "steward": "admin" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__permissions (id, child_id, title, from_datetime, to_datetime, status, created_at, updated_at) VALUES ('p-a', ?, 'Concert', '2026-10-01T18:00', '2026-10-01T23:00', 'pending', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z'), ('p-b', ?, 'Sleepover', '2026-10-02T18:00', '2026-10-03T10:00', 'pending', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')",
+          "params": ["{{a}}", "{{b}}"]
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "SELECT id FROM app_parental_agreement__permissions ORDER BY id",
+          "params": [],
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "p-a" }] }
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "UPDATE app_parental_agreement__permissions SET title = ? WHERE id = ?",
+          "params": ["hijacked", "p-b"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "SELECT id, title FROM app_parental_agreement__permissions ORDER BY id",
+          "params": [],
+          "expect": {
+            "status": 200,
+            "rowCount": 2,
+            "rowsContain": [{ "id": "p-a", "title": "Concert" }, { "id": "p-b", "title": "Sleepover" }]
+          }
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "UPDATE app_parental_agreement__permissions SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?",
+          "params": ["approved", "{{steward}}", "2026-09-02T00:00:00Z", "p-b"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "b",
+          "sql": "SELECT id, status, approved_by FROM app_parental_agreement__permissions",
+          "params": [],
+          "expect": {
+            "status": 200,
+            "rowCount": 1,
+            "rowsContain": [{ "id": "p-b", "status": "approved", "approved_by": "scn-steward" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "in a shared space only the steward reads the whole decisions ledger; a participant adult reads only decisions about themselves",
+      "context": "shared_space",
+      "members": { "a": "adult", "b": "adult", "steward": "admin" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__decisions (id, permission_id, child_id, decision, note, decided_by, decided_at) VALUES ('d-a', 'p-a', ?, 'approved', '', ?, '2026-09-02T00:00:00Z'), ('d-b', 'p-b', ?, 'denied', '', ?, '2026-09-02T00:00:00Z')",
+          "params": ["{{a}}", "{{steward}}", "{{b}}", "{{steward}}"]
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "SELECT id FROM app_parental_agreement__decisions ORDER BY id",
+          "params": [],
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "d-a" }] }
+        },
+        {
+          "action": "db",
+          "as": "b",
+          "sql": "SELECT id FROM app_parental_agreement__decisions ORDER BY id",
+          "params": [],
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "d-b" }] }
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "SELECT id FROM app_parental_agreement__decisions ORDER BY id",
+          "params": [],
+          "expect": { "status": 200, "rowCount": 2, "rowsContain": [{ "id": "d-a" }, { "id": "d-b" }] }
+        }
+      ]
     }
   ]
 }

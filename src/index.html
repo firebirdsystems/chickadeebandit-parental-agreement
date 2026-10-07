@@ -340,7 +340,7 @@
 </div>
 
 <script type="module">
-import { memberColor, initial, esc, isAdult, hubConfirm, searchMatch } from "/hub-sdk.js";
+import { memberColor, initial, esc, isAdult, hubConfirm, searchMatch, glyph } from "/hub-sdk.js";
 import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -470,8 +470,8 @@ function adults() {
 }
 
 function statusHtml(status) {
-  const { cls, label } = STATUS_INFO[status] ?? STATUS_INFO.pending;
-  return `<span class="status-badge ${cls}">${label}</span>`;
+  const { cls, label, glyph: glyphName } = STATUS_INFO[status] ?? STATUS_INFO.pending;
+  return `<span class="status-badge ${cls}">${glyphName ? glyph(glyphName, { accent: "currentColor" }) + " " : ""}${label}</span>`;
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────
@@ -644,7 +644,7 @@ function openRequestForm(req = null) {
 
   openModal(`
     <h3>${isEdit ? "Edit Request" : "New Permission Request"}</h3>
-    ${isEdit ? `<div class="form-notice">⚠️ Editing will clear the current approval — parents must re-approve.</div>` : ""}
+    ${isEdit ? `<div class="form-notice">${glyph("warning")} Editing will clear the current approval — parents must re-approve.</div>` : ""}
     <div class="form-group">
       <label>What do you want to do?</label>
       <input id="f-title" type="text" value="${esc(req?.title ?? "")}"
@@ -699,7 +699,7 @@ window.submitForm = async function(existingId) {
 function openDecisionModal(req, decision) {
   const isApprove = decision === "approve";
   openModal(`
-    <h3>${isApprove ? "✅ Approve Request" : "❌ Deny Request"}</h3>
+    <h3>${isApprove ? `${glyph("tick")} Approve Request` : `${glyph("close")} Deny Request`}</h3>
     <div style="margin-bottom:14px">
       <div style="font-weight:600">${esc(req.title)}</div>
       <div style="font-size:.85rem;color:var(--muted);margin-top:3px">
@@ -789,8 +789,8 @@ function openDetailModal(req) {
 
     <div class="modal-actions">
       ${canDecide ? `
-        <button class="btn btn-success" data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'approve')">✓ Approve</button>
-        <button class="btn btn-danger"  data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'reject')">✗ Deny</button>
+        <button class="btn btn-success" data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'approve')">${glyph("tick", { accent: "currentColor" })} Approve</button>
+        <button class="btn btn-danger"  data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'reject')">${glyph("close", { accent: "currentColor" })} Deny</button>
       ` : ""}
       ${canCancel ? `<button class="btn btn-ghost btn-sm" data-req-id="${esc(req.id)}" onclick="cancelRequest(this.dataset.reqId)">Cancel Request</button>` : ""}
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
@@ -878,7 +878,7 @@ function renderAdultView() {
   document.getElementById("root").innerHTML = `
     <header>
       <div>
-        <h1>✋ Parental Agreement</h1>
+        <h1>${glyph("raised-hand")} Parental Agreement</h1>
         <div class="sub">Review permission requests from your kids</div>
       </div>
     </header>
@@ -909,7 +909,7 @@ function renderChildView() {
   document.getElementById("root").innerHTML = `
     <header>
       <div>
-        <h1>✋ Permissions</h1>
+        <h1>${glyph("raised-hand")} Permissions</h1>
         <div class="sub">Ask for permission from your parents</div>
       </div>
       <button class="btn btn-ghost"

@@ -12,12 +12,12 @@ describe("STATUS_INFO", () => {
     }
   });
 
-  it("approved label contains a checkmark", () => {
-    expect(STATUS_INFO.approved.label).toMatch(/✓/);
+  it("approved carries a tick glyph", () => {
+    expect(STATUS_INFO.approved.glyph).toBe("tick");
   });
 
-  it("rejected label contains an X", () => {
-    expect(STATUS_INFO.rejected.label).toMatch(/✗/);
+  it("rejected carries a close glyph", () => {
+    expect(STATUS_INFO.rejected.glyph).toBe("close");
   });
 });
 

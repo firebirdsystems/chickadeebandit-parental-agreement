@@ -5,8 +5,8 @@
 
 export const STATUS_INFO = {
   pending:   { cls: "status-pending",   label: "Pending" },
-  approved:  { cls: "status-approved",  label: "✓ Approved" },
-  rejected:  { cls: "status-rejected",  label: "✗ Rejected" },
+  approved:  { cls: "status-approved",  label: "Approved", glyph: "tick" },
+  rejected:  { cls: "status-rejected",  label: "Rejected", glyph: "close" },
   cancelled: { cls: "status-cancelled", label: "Cancelled" },
 };
 

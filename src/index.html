@@ -565,7 +565,7 @@ async function updateRequest(reqId, fields) {
     status = 'pending', updated_at = ?
     WHERE id = ? AND child_id = ? AND status = 'pending'`,
   [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId, ME.id]);
-  if (changed === 0) throw new Error("This request can no longer be changed.");
+  if (changed === 0) throw Object.assign(new Error("This request can no longer be changed."), { forUser: true });
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = deriveStatus({
@@ -628,7 +628,7 @@ async function cancelRequest(reqId) {
   const now = new Date().toISOString();
   const { changed } = await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
     [now, reqId, ME.id]);
-  if (changed === 0) throw new Error("This request can no longer be cancelled.");
+  if (changed === 0) throw Object.assign(new Error("This request can no longer be cancelled."), { forUser: true });
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = { ...requests[idx], status: "cancelled", updated_at: now };
@@ -717,7 +717,7 @@ window.submitForm = async function(existingId) {
     } else {
       await createRequest({ title, description, from_datetime, to_datetime });
     }
-  } catch (e) { showError(e.message); }
+  } catch (e) { console.error(e); showError(e?.forUser ? e.message : "Couldn’t save the request — try again."); }
 };
 
 // ─── Approve / reject modal ───────────────────────────────────────────────
@@ -755,7 +755,7 @@ window.submitDecision = async function(reqId, decision) {
   try {
     if (decision === "approve") await approveRequest(reqId, note);
     else                        await rejectRequest(reqId, note);
-  } catch (e) { showError(e.message); }
+  } catch (e) { console.error(e); showError("Couldn’t record the decision — try again."); }
 };
 
 // ─── Detail modal ─────────────────────────────────────────────────────────
@@ -837,7 +837,7 @@ window.openDecisionModal_ = function(reqId, decision) {
   openDecisionModal(req, decision);
 };
 
-window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => showError(e.message));
+window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => { console.error(e); showError(e?.forUser ? e.message : "Couldn’t cancel the request — try again."); });
 window.closeModal     = closeModal;
 
 // ─── Render ───────────────────────────────────────────────────────────────

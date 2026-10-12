@@ -65,6 +65,7 @@
       align-items: center; justify-content: center;
       color: #9ca3af; font-size: 12px; gap: 6px;
     }
+    .load-error { margin: 8px; padding: 8px 10px; border-radius: 10px; background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #b91c1c); font-size: 0.8rem; }
   </style>
 </head>
 <body>
@@ -91,12 +92,14 @@ async function dbq(sql, params = []) {
 
 async function loadMembers() {
   if (!CONTEXT) return {};
-  try {
-    const res = await fetch(`${CONTEXT}?keys=family.members`);
-    const data = await res.json();
-    const list = data["family.members"] ?? [];
-    return Object.fromEntries(list.map(m => [m.id, m.name]));
-  } catch { return {}; }
+  // A failed read throws: it is a failed load, never a request from "Someone".
+  const res = await fetch(`${CONTEXT}?keys=family.members`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("Couldn’t reach the hub. Try again.");
+  // A 200 that names the key in `$errors` is the hub saying it could not read it.
+  if (Array.isArray(data.$errors) && data.$errors.includes("family.members")) throw new Error("Couldn’t reach the hub. Try again.");
+  const list = data["family.members"] ?? [];
+  return Object.fromEntries(list.map(m => [m.id, m.name]));
 }
 
 function fmtRelTime(iso) {
@@ -117,8 +120,9 @@ async function load() {
          WHERE status = 'pending'
          ORDER BY created_at ASC
          LIMIT 20`),
-    // The count still draws without the decision trail.
-    dbq(`SELECT permission_id, decided_at FROM app_parental_agreement__decisions`).catch(() => ({ rows: [] })),
+    // Without the decision trail an answered request would count as pending,
+    // so a failed read here fails the load.
+    dbq(`SELECT permission_id, decided_at FROM app_parental_agreement__decisions`),
   ]);
 
   // Approval lives in the adult-only decisions table; a permissions row keeps
@@ -172,7 +176,8 @@ async function load() {
 }
 
 load().catch(() => {
-  document.body.innerHTML = `<div class="empty"><a href="/open/${APP_ID}" style="color:#111827;font-weight:600">Open app →</a></div>`;
+  // A failed read is not "No pending requests": say so, and keep the way in.
+  document.body.innerHTML = `<div class="load-error" data-testid="load-error" role="alert">Couldn’t load the permission requests.</div><div class="empty"><a href="/open/${APP_ID}" style="color:#111827;font-weight:600">Open app →</a></div>`;
 });
 </script>
 </body>

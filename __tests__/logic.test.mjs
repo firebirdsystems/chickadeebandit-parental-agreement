@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields } from "../src/logic.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren } from "../src/logic.js";
 
 // ── STATUS_INFO ───────────────────────────────────────────────────────────────
 
@@ -77,5 +77,44 @@ describe("searchableFields", () => {
     const fields = searchableFields({ title: "Sleepover", description: "at Kit's on Friday", note: "ok if home by 10" });
     expect(fields).toContain("at Kit's on Friday");
     expect(fields).toContain("ok if home by 10");
+  });
+});
+
+// ── reviewsRequests ───────────────────────────────────────────────────────────
+
+describe("reviewsRequests", () => {
+  const adult = { id: "a1", role: "adult" };
+  const child = { id: "c1", role: "child" };
+
+  it("any adult reviews in a household, which is the default", () => {
+    expect(reviewsRequests(adult)).toBe(true);
+    expect(reviewsRequests(adult, { tenantKind: "household", isAdmin: false })).toBe(true);
+    expect(reviewsRequests(child)).toBe(false);
+    expect(reviewsRequests(null)).toBe(false);
+  });
+
+  it("only the steward reviews in a shared space", () => {
+    expect(reviewsRequests(adult, { tenantKind: "shared_space", isAdmin: false })).toBe(false);
+    expect(reviewsRequests(adult, { tenantKind: "shared_space", isAdmin: true })).toBe(true);
+  });
+
+  it("being a household's admin does not make a child a reviewer", () => {
+    expect(reviewsRequests(child, { tenantKind: "household", isAdmin: true })).toBe(false);
+  });
+});
+
+// ── hasNoChildren ─────────────────────────────────────────────────────────────
+
+describe("hasNoChildren", () => {
+  it("is true for a loaded list of adults only", () => {
+    expect(hasNoChildren([{ id: "a1", role: "adult" }, { id: "a2", role: "admin" }])).toBe(true);
+  });
+
+  it("is false once any member is not an adult", () => {
+    expect(hasNoChildren([{ id: "a1", role: "adult" }, { id: "c1", role: "child" }])).toBe(false);
+  });
+
+  it("is false for an empty list, which means the members did not load", () => {
+    expect(hasNoChildren([])).toBe(false);
   });
 });

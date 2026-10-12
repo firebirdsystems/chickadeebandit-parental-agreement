@@ -304,6 +304,7 @@
 
     /* ── Misc ────────────────────────────────────────────── */
     .empty { text-align: center; padding: 36px 16px; color: var(--muted); font-size: 0.9rem; }
+    .app-error { margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--red-light); color: var(--red); font-size: 0.88rem; }
     .loading { text-align: center; padding: 40px; color: var(--muted); }
     .section-title {
       font-size: 0.72rem;
@@ -331,6 +332,8 @@
       background: var(--surface, var(--card, #fff)); color: var(--text, inherit);
     }
     .search-input:focus { outline: none; border-color: var(--accent, #6366f1); }
+    .load-error { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #b91c1c); font-size: 0.9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .load-error-retry { background: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 10px; font: inherit; font-weight: 600; color: inherit; cursor: pointer; flex-shrink: 0; }
   </style>
   <base href="/run/parental-agreement/" />
 </head>
@@ -341,13 +344,17 @@
 
 <script type="module">
 import { memberColor, initial, esc, isAdult, hubConfirm, searchMatch, glyph } from "/hub-sdk.js";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields } from "./logic.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
 const APP_ID  = window.__APP_ID      ?? "parental-agreement";
 const APPEND_RECORD = window.__APPEND_RECORD_URL ?? `/run/${APP_ID}/api/append-record`;
 const ME      = window.__CURRENT_MEMBER ?? null;
+// Reviewing other members' requests: any adult in a household, and only the
+// steward in a shared space. The hub decides; this only keeps the page from
+// offering a review it would refuse.
+const REVIEWS = reviewsRequests(ME, { tenantKind: window.__TENANT_KIND ?? "household", isAdmin: window.__IS_ADMIN === true });
 
 // ─── State ────────────────────────────────────────────────────────────────
 let members   = [];
@@ -356,6 +363,8 @@ let requests  = [];
 let decisions = [];
 let activeTab = "pending"; // adult: "pending" | "all" / child: "mine"
 let searchQ = "";       // in-app search (see logic.js searchableFields)
+let errorMsg = "";      // the last refusal or failure, shown above the list
+let loadFailed = false; // the first load failed: banner instead of the list
 
 // ─── DB helper ────────────────────────────────────────────────────────────
 async function db(sql, params = []) {
@@ -365,7 +374,11 @@ async function db(sql, params = []) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  return res.json();
+  const json = await res.json().catch(() => null);
+  // A refusal is an answer too: without this a write the hub turned down read
+  // as a success, and the page went on to show a change that was never made.
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "The request could not be saved");
+  return json;
 }
 
 async function appendRecord(name, data) {
@@ -374,8 +387,8 @@ async function appendRecord(name, data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || json.error) throw new Error(json.error || "Append failed");
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Append failed");
   return json;
 }
 
@@ -396,10 +409,13 @@ async function loadMembers() {
     memberMap = new Map(members.map(m => [m.id, m]));
     return;
   }
-  try {
-    const res = await fetch(`${CONTEXT}?keys=family.members`);
-    members = ((await res.json())["family.members"]) ?? [];
-  } catch { members = []; }
+  // A failed read throws: it is a failed load, never a household of nobody.
+  const res = await fetch(`${CONTEXT}?keys=family.members`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("Couldn’t reach the hub. Try again.");
+  // A 200 that names the key in `$errors` is the hub saying it could not read it.
+  if (Array.isArray(data.$errors) && data.$errors.includes("family.members")) throw new Error("Couldn’t reach the hub. Try again.");
+  members = data["family.members"] ?? [];
   memberMap = new Map(members.map(m => [m.id, m]));
 }
 
@@ -424,9 +440,11 @@ function statusRank(s) { return s === "pending" ? 0 : s === "approved" ? 1 : 2; 
 
 async function loadRequests() {
   if (!DB || !ME) return;
-  const meIsAdult = isAdult(ME);
+  // An adult who takes part in a shared space without stewarding it files no
+  // requests and may read nobody else's, so there is nothing to ask for.
+  if (isAdult(ME) && !REVIEWS) return;
 
-  const permSql = meIsAdult
+  const permSql = REVIEWS
     ? [`SELECT * FROM app_parental_agreement__permissions WHERE status != 'cancelled'`, []]
     : [`SELECT * FROM app_parental_agreement__permissions WHERE child_id = ?`, [ME.id]];
 
@@ -541,12 +559,13 @@ async function updateRequest(reqId, fields) {
   // The child owns and may edit/cancel their own pending request (owner_only,
   // member_can_update defaults true). Bumping updated_at supersedes any prior
   // approval decision, so the request reverts to pending and parents re-approve.
-  await db(`UPDATE app_parental_agreement__permissions SET
+  const { changed } = await db(`UPDATE app_parental_agreement__permissions SET
     title = ?, description = ?,
     from_datetime = ?, to_datetime = ?,
     status = 'pending', updated_at = ?
     WHERE id = ? AND child_id = ? AND status = 'pending'`,
   [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId, ME.id]);
+  if (changed === 0) throw new Error("This request can no longer be changed.");
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = deriveStatus({
@@ -607,8 +626,9 @@ async function cancelRequest(reqId) {
   if (!await hubConfirm({ message: "Cancel this permission request?", confirmLabel: "Cancel request" })) return;
   const req = requests.find(r => r.id === reqId);
   const now = new Date().toISOString();
-  await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
+  const { changed } = await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
     [now, reqId, ME.id]);
+  if (changed === 0) throw new Error("This request can no longer be cancelled.");
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = { ...requests[idx], status: "cancelled", updated_at: now };
@@ -627,6 +647,9 @@ async function cancelRequest(reqId) {
 let modalEl = null;
 function openModal(html) {
   closeModal();
+  // Starting something new retires the last failure.
+  errorMsg = "";
+  document.querySelector(".app-error")?.remove();
   modalEl = document.createElement("div");
   modalEl.className = "modal-backdrop";
   modalEl.innerHTML = `<div class="modal">${html}</div>`;
@@ -688,11 +711,13 @@ window.submitForm = async function(existingId) {
   const from_datetime = localToISO(from_raw);
   const to_datetime   = localToISO(to_raw);
 
-  if (existingId) {
-    await updateRequest(existingId, { title, description, from_datetime, to_datetime });
-  } else {
-    await createRequest({ title, description, from_datetime, to_datetime });
-  }
+  try {
+    if (existingId) {
+      await updateRequest(existingId, { title, description, from_datetime, to_datetime });
+    } else {
+      await createRequest({ title, description, from_datetime, to_datetime });
+    }
+  } catch (e) { showError(e.message); }
 };
 
 // ─── Approve / reject modal ───────────────────────────────────────────────
@@ -727,18 +752,19 @@ window.submitDecision = async function(reqId, decision) {
   const note = document.getElementById("d-note").value.trim();
   const btn = modalEl?.querySelector('.modal-actions button:not(.btn-ghost)');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  if (decision === "approve") await approveRequest(reqId, note);
-  else                        await rejectRequest(reqId, note);
+  try {
+    if (decision === "approve") await approveRequest(reqId, note);
+    else                        await rejectRequest(reqId, note);
+  } catch (e) { showError(e.message); }
 };
 
 // ─── Detail modal ─────────────────────────────────────────────────────────
 function openDetailModal(req) {
   const child       = memberMap.get(req.child_id);
   const approver    = req.approved_by ? memberMap.get(req.approved_by) : null;
-  const meIsAdult   = isAdult(ME);
   const isMyRequest = ME?.id === req.child_id;
   const canEdit     = req.status === "pending" && isMyRequest;
-  const canDecide   = req.status === "pending" && meIsAdult;
+  const canDecide   = req.status === "pending" && REVIEWS;
   const canCancel   = req.status === "pending" && isMyRequest;
 
   const approvalBlock = (req.status === "approved" || req.status === "rejected") && req.approval_note
@@ -789,8 +815,8 @@ function openDetailModal(req) {
 
     <div class="modal-actions">
       ${canDecide ? `
-        <button class="btn btn-success" data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'approve')">${glyph("tick", { accent: "currentColor" })} Approve</button>
-        <button class="btn btn-danger"  data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'reject')">${glyph("close", { accent: "currentColor" })} Deny</button>
+        <button class="btn btn-success" data-testid="approve-request" data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'approve')">${glyph("tick", { accent: "currentColor" })} Approve</button>
+        <button class="btn btn-danger"  data-testid="deny-request" data-req-id="${esc(req.id)}" onclick="openDecisionModal_(this.dataset.reqId, 'reject')">${glyph("close", { accent: "currentColor" })} Deny</button>
       ` : ""}
       ${canCancel ? `<button class="btn btn-ghost btn-sm" data-req-id="${esc(req.id)}" onclick="cancelRequest(this.dataset.reqId)">Cancel Request</button>` : ""}
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
@@ -811,17 +837,16 @@ window.openDecisionModal_ = function(reqId, decision) {
   openDecisionModal(req, decision);
 };
 
-window.cancelRequest  = cancelRequest;
+window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => showError(e.message));
 window.closeModal     = closeModal;
 
 // ─── Render ───────────────────────────────────────────────────────────────
 function renderCard(req) {
   const child       = memberMap.get(req.child_id);
-  const meIsAdult   = isAdult(ME);
-  const needsAction = req.status === "pending" && meIsAdult;
+  const needsAction = req.status === "pending" && REVIEWS;
 
   return `
-    <div class="request-card ${needsAction ? "needs-action" : ""}" data-req-id="${esc(req.id)}" onclick="openDetailModal_(this.dataset.reqId)">
+    <div class="request-card ${needsAction ? "needs-action" : ""}" data-testid="request-card" data-req-id="${esc(req.id)}" onclick="openDetailModal_(this.dataset.reqId)">
       <div class="request-main">
         <div class="request-title">${esc(req.title)}</div>
         <div class="request-who">
@@ -832,7 +857,7 @@ function renderCard(req) {
       </div>
       <div class="request-right">
         ${statusHtml(req.status)}
-        ${needsAction ? `<div class="action-needed">Needs approval</div>` : ""}
+        ${needsAction ? `<div class="action-needed" data-testid="needs-approval">Needs approval</div>` : ""}
       </div>
     </div>
   `;
@@ -853,14 +878,57 @@ function render() {
     document.getElementById("root").innerHTML = `<div class="empty">Please log in to use Parental Agreement.</div>`;
     return;
   }
+  if (loadFailed) {
+    // Nothing was read: no "all caught up", and no form to file a request from.
+    document.getElementById("root").innerHTML = `
+      <header data-testid="app-header">
+        <div>
+          <h1>${glyph("raised-hand")} ${isAdult(ME) ? "Parental Agreement" : "Permissions"}</h1>
+        </div>
+      </header>
+      <div class="load-error" data-testid="load-error" role="alert"><span>Couldn’t load the requests.</span>
+        <button type="button" class="load-error-retry" data-testid="load-retry" onclick="retryLoad()">Try again</button></div>`;
+    return;
+  }
 
-  const meIsAdult = isAdult(ME);
-
-  if (meIsAdult) {
+  if (REVIEWS) {
     renderAdultView();
+  } else if (isAdult(ME)) {
+    renderParticipantView();
   } else {
     renderChildView();
   }
+}
+
+function errorHtml() {
+  return errorMsg ? `<div class="app-error" role="alert">${esc(errorMsg)}</div>` : "";
+}
+
+// A failure closes whatever dialog raised it and is shown above the list, so
+// it is still on screen once the dialog is gone.
+function showError(message) {
+  errorMsg = message || "Something went wrong. Please try again.";
+  closeModal();
+  render();
+}
+
+const NO_CHILDREN_NOTE = "Permission requests come from child members, and there are none here yet. Add a child member and they can ask for permission in this app.";
+
+// An adult in a shared space who is not its steward: they file no requests,
+// and the steward alone reviews them.
+function renderParticipantView() {
+  document.getElementById("root").innerHTML = `
+    <header data-testid="app-header">
+      <div>
+        <h1>${glyph("raised-hand")} Parental Agreement</h1>
+        <div class="sub">Permission requests from child members</div>
+      </div>
+    </header>
+    ${errorHtml()}
+    <div class="empty" data-testid="participant-note">${hasNoChildren(members)
+      ? NO_CHILDREN_NOTE
+      : "In a shared space, the steward reviews permission requests. Child members ask for permission here, and the steward answers."}</div>
+  `;
 }
 
 function renderAdultView() {
@@ -872,11 +940,11 @@ function renderAdultView() {
   const listHtml = list.length === 0
     ? (searchQ
       ? `<div class="empty">No requests match "${esc(searchQ)}".</div>`
-      : `<div class="empty">${activeTab === "pending" ? "No pending requests — all caught up." : "No resolved requests yet."}</div>`)
+      : `<div class="empty" data-testid="empty-state">${!requests.length && hasNoChildren(members) ? NO_CHILDREN_NOTE : activeTab === "pending" ? "No pending requests — all caught up." : "No resolved requests yet."}</div>`)
     : list.map(r => renderCard(r)).join("");
 
   document.getElementById("root").innerHTML = `
-    <header>
+    <header data-testid="app-header">
       <div>
         <h1>${glyph("raised-hand")} Parental Agreement</h1>
         <div class="sub">Review permission requests from your kids</div>
@@ -884,14 +952,15 @@ function renderAdultView() {
     </header>
 
     <div class="tabs">
-      <button class="tab ${activeTab === "pending" ? "active" : ""}" onclick="setTab('pending')">
+      <button class="tab ${activeTab === "pending" ? "active" : ""}" data-testid="tab-pending" onclick="setTab('pending')">
         Pending ${pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : ""}
       </button>
-      <button class="tab ${activeTab === "all" ? "active" : ""}" onclick="setTab('all')">
+      <button class="tab ${activeTab === "all" ? "active" : ""}" data-testid="tab-resolved" onclick="setTab('all')">
         Resolved
       </button>
     </div>
 
+    ${errorHtml()}
     ${requests.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search requests…" aria-label="Search requests" value="${esc(searchQ)}" /></div>` : ""}
     <div>${listHtml}</div>
   `;
@@ -917,6 +986,7 @@ function renderChildView() {
         onclick="openNewRequest()">+ New Request</button>
     </header>
 
+    ${errorHtml()}
     ${requests.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search requests…" aria-label="Search requests" value="${esc(searchQ)}" /></div>` : ""}
     <div>${listHtml}</div>
   `;
@@ -938,11 +1008,18 @@ function handleDeepLink() {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────
-(async () => {
-  await Promise.all([loadMembers(), DB ? loadRequests() : Promise.resolve()]);
+async function firstLoad() {
+  let failed = false;
+  await Promise.all([
+    loadMembers().catch(() => { failed = true; }),
+    (DB ? loadRequests() : Promise.resolve()).catch(() => { failed = true; }),
+  ]);
+  loadFailed = failed;
   render();
-  handleDeepLink();
-})();
+  if (!loadFailed) handleDeepLink(); // never open a detail over a failed load
+}
+window.retryLoad = firstLoad;
+firstLoad();
 </script>
 </body>
 </html>

@@ -1,0 +1,94 @@
+{
+  "scenarios": [
+    {
+      "name": "in a shared space with no children both steward and participant are told so; only the steward gets the review tabs and the approve controls",
+      "context": "shared_space",
+      "members": {
+        "steward": "admin",
+        "pat": "adult",
+        "sam": "adult"
+      },
+      "steps": [
+        {
+          "action": "open",
+          "as": "pat"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"app-header\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"tab-pending\"]",
+          "count": 0
+        },
+        {
+          "action": "expectText",
+          "as": "pat",
+          "selector": "[data-testid=\"participant-note\"]",
+          "text": "there are none here yet"
+        },
+        {
+          "action": "open",
+          "as": "steward"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"tab-pending\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"tab-resolved\"]"
+        },
+        {
+          "action": "expectText",
+          "as": "steward",
+          "selector": "[data-testid=\"empty-state\"]",
+          "text": "there are none here yet"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"participant-note\"]",
+          "count": 0
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__permissions (id, child_id, title, from_datetime, to_datetime, status, created_at, updated_at) VALUES ('req1', ?, ?, '2026-01-16T18:00:00.000Z', '2026-01-16T23:00:00.000Z', 'pending', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z')",
+          "params": [
+            "{{pat}}",
+            "Late return from the match"
+          ]
+        },
+        {
+          "action": "reload",
+          "as": "steward"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"request-card\"][data-req-id=\"req1\"] [data-testid=\"needs-approval\"]"
+        },
+        {
+          "action": "click",
+          "as": "steward",
+          "selector": "[data-testid=\"request-card\"][data-req-id=\"req1\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"approve-request\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"deny-request\"]"
+        }
+      ]
+    }
+  ]
+}

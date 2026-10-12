@@ -84,7 +84,9 @@ async function dbq(sql, params = []) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  return res.json();
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Couldn’t reach the hub. Try again.");
+  return json;
 }
 
 async function loadMembers() {
@@ -115,7 +117,8 @@ async function load() {
          WHERE status = 'pending'
          ORDER BY created_at ASC
          LIMIT 20`),
-    dbq(`SELECT permission_id, decided_at FROM app_parental_agreement__decisions`),
+    // The count still draws without the decision trail.
+    dbq(`SELECT permission_id, decided_at FROM app_parental_agreement__decisions`).catch(() => ({ rows: [] })),
   ]);
 
   // Approval lives in the adult-only decisions table; a permissions row keeps

@@ -626,7 +626,7 @@ async function cancelRequest(reqId) {
   if (!await hubConfirm({ message: "Cancel this permission request?", confirmLabel: "Cancel request" })) return;
   const req = requests.find(r => r.id === reqId);
   const now = new Date().toISOString();
-  const { changed } = await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ?`,
+  const { changed } = await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ? AND status != 'cancelled'`,
     [now, reqId, ME.id]);
   if (changed === 0) throw Object.assign(new Error("This request can no longer be cancelled."), { forUser: true });
 
@@ -724,7 +724,7 @@ window.submitForm = async function(existingId) {
   } catch (e) {
     console.error(e);
     // A request that can no longer be changed has nothing left to retry.
-    if (e?.forUser) showError(e.message);
+    if (e?.forUser) await showRefusal(e.message);
     else showFormError(form, "Couldn’t save the request — try again.");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
@@ -857,7 +857,7 @@ window.openDecisionModal_ = function(reqId, decision) {
   openDecisionModal(req, decision);
 };
 
-window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => { console.error(e); showError(e?.forUser ? e.message : "Couldn’t cancel the request — try again."); });
+window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => { console.error(e); return e?.forUser ? showRefusal(e.message) : showError("Couldn’t cancel the request — try again."); });
 window.closeModal     = closeModal;
 
 // ─── Render ───────────────────────────────────────────────────────────────
@@ -930,6 +930,13 @@ function showError(message) {
   errorMsg = message || "Something went wrong. Please try again.";
   closeModal();
   render();
+}
+
+// The hub turned the write down because the request changed elsewhere: read
+// the list again first, so the card on screen is the stored one.
+async function showRefusal(message) {
+  await loadRequests().catch(e => console.error(e));
+  showError(message);
 }
 
 // A failed save from a dialog the user typed into: the dialog stays open as

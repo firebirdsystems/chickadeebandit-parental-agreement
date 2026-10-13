@@ -304,7 +304,7 @@
 
     /* ── Misc ────────────────────────────────────────────── */
     .empty { text-align: center; padding: 36px 16px; color: var(--muted); font-size: 0.9rem; }
-    .app-error { margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--red-light); color: var(--red); font-size: 0.88rem; }
+    .app-error, .form-error { margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--red-light); color: var(--red); font-size: 0.88rem; }
     .loading { text-align: center; padding: 40px; color: var(--muted); }
     .section-title {
       font-size: 0.72rem;
@@ -705,8 +705,12 @@ window.submitForm = async function(existingId) {
   if (!from_raw) { document.getElementById("f-from").focus();  return; }
   if (!to_raw)   { document.getElementById("f-to").focus();    return; }
 
-  const btn = modalEl?.querySelector('.modal-actions .btn-primary');
+  const form = modalEl;
+  const btn = form?.querySelector('.modal-actions .btn-primary');
+  if (btn?.disabled) return;
+  const label = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  form?.querySelector(".form-error")?.remove();
 
   const from_datetime = localToISO(from_raw);
   const to_datetime   = localToISO(to_raw);
@@ -717,7 +721,14 @@ window.submitForm = async function(existingId) {
     } else {
       await createRequest({ title, description, from_datetime, to_datetime });
     }
-  } catch (e) { console.error(e); showError(e?.forUser ? e.message : "Couldn’t save the request — try again."); }
+  } catch (e) {
+    console.error(e);
+    // A request that can no longer be changed has nothing left to retry.
+    if (e?.forUser) showError(e.message);
+    else showFormError(form, "Couldn’t save the request — try again.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 };
 
 // ─── Approve / reject modal ───────────────────────────────────────────────
@@ -750,12 +761,21 @@ function openDecisionModal(req, decision) {
 
 window.submitDecision = async function(reqId, decision) {
   const note = document.getElementById("d-note").value.trim();
-  const btn = modalEl?.querySelector('.modal-actions button:not(.btn-ghost)');
+  const form = modalEl;
+  const btn = form?.querySelector('.modal-actions button:not(.btn-ghost)');
+  if (btn?.disabled) return;
+  const label = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  form?.querySelector(".form-error")?.remove();
   try {
     if (decision === "approve") await approveRequest(reqId, note);
     else                        await rejectRequest(reqId, note);
-  } catch (e) { console.error(e); showError("Couldn’t record the decision — try again."); }
+  } catch (e) {
+    console.error(e);
+    showFormError(form, "Couldn’t record the decision — try again.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 };
 
 // ─── Detail modal ─────────────────────────────────────────────────────────
@@ -910,6 +930,19 @@ function showError(message) {
   errorMsg = message || "Something went wrong. Please try again.";
   closeModal();
   render();
+}
+
+// A failed save from a dialog the user typed into: the dialog stays open as
+// typed and says so itself. If that dialog is no longer the one on screen, the
+// failure goes above the list instead.
+function showFormError(form, message) {
+  const actions = form && form === modalEl ? form.querySelector(".modal-actions") : null;
+  if (!actions) { showError(message); return; }
+  const el = document.createElement("div");
+  el.className = "form-error";
+  el.setAttribute("role", "alert");
+  el.textContent = message;
+  actions.before(el);
 }
 
 const NO_CHILDREN_NOTE = "Permission requests come from child members, and there are none here yet. Add a child member and they can ask for permission in this app.";

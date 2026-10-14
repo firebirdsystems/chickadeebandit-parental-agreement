@@ -518,7 +518,8 @@ async function logActivity(permissionId, action, detail = "") {
 // A write whose answer was lost may have landed: it is looked up by the id the
 // form kept. undefined: it is not there, or could not be read.
 async function storedRequest(id) {
-  try { return (await db(`SELECT * FROM app_parental_agreement__permissions WHERE id = ?`, [id])).rows?.[0]; }
+  // The row, null when it is not there, undefined when the read failed.
+  try { return (await db(`SELECT * FROM app_parental_agreement__permissions WHERE id = ?`, [id])).rows?.[0] ?? null; }
   catch (e) { console.error(e); return undefined; }
 }
 
@@ -547,7 +548,7 @@ async function createRequest(fields, form) {
     const stored = unknown ? await storedRequest(id) : undefined;
     // A retry's UNIQUE answer may be its own first press: with the read-back
     // failed, nothing is known, so the line is "try again", not "already exists".
-    if (!stored && unknown && /UNIQUE/i.test(`${e?.code} ${e?.message}`)) throw Object.assign(new Error("create outcome unknown"), { cause: e });
+    if (stored === undefined && unknown && /UNIQUE/i.test(`${e?.code} ${e?.message}`)) throw Object.assign(new Error("create outcome unknown"), { cause: e });
     if (!stored) throw e;
     console.error(e);
     row = stored;
@@ -660,6 +661,9 @@ async function rejectRequest(reqId, note, form) {
 // landed unheard (a second press then changes nothing) is known by it.
 const cancelStamps = new Map();
 async function cancelRequest(reqId) {
+  // The detail dialog the cancel came from: only it closes, never one opened
+  // while the confirm or the write was pending.
+  const dlg = modalEl;
   if (!await hubConfirm({ message: "Cancel this permission request?", confirmLabel: "Cancel request" })) return;
   const req = requests.find(r => r.id === reqId);
   const now = cancelStamps.get(reqId) ?? new Date().toISOString();
@@ -682,7 +686,7 @@ async function cancelRequest(reqId) {
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = { ...requests[idx], status: "cancelled", updated_at: now };
-  closeModal();
+  closeDialog(dlg);
   render();
 
   if (req) {
@@ -933,7 +937,11 @@ window.openDecisionModal_ = function(reqId, decision) {
   openDecisionModal(req, decision);
 };
 
-window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => { console.error(e); return e?.forUser ? showRefusal(e.message) : showError(failureLine(e, { action: "cancel the request", thing: "request" })); });
+window.cancelRequest  = (reqId) => {
+  // A failure closes only the dialog the cancel came from, never a later one.
+  const dlg = modalEl;
+  return cancelRequest(reqId).catch(e => { console.error(e); return e?.forUser ? showRefusal(e.message, dlg) : showError(failureLine(e, { action: "cancel the request", thing: "request" }), dlg); });
+};
 window.closeModal     = closeModal;
 
 // ─── Render ───────────────────────────────────────────────────────────────

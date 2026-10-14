@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren } from "../src/logic.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren, outcomeUnknown, storedDiffers } from "../src/logic.js";
 
 // ── STATUS_INFO ───────────────────────────────────────────────────────────────
 
@@ -116,5 +116,26 @@ describe("hasNoChildren", () => {
 
   it("is false for an empty list, which means the members did not load", () => {
     expect(hasNoChildren([])).toBe(false);
+  });
+});
+
+describe("outcomeUnknown", () => {
+  it("is true when the answer may have been lost", () => {
+    expect(outcomeUnknown(new Error("Failed to fetch"))).toBe(true);
+    for (const status of [400, 500, 502, 503]) expect(outcomeUnknown({ status })).toBe(true);
+  });
+  it("is false for a clean refusal", () => {
+    for (const status of [403, 409, 507]) expect(outcomeUnknown({ status })).toBe(false);
+  });
+});
+
+describe("storedDiffers", () => {
+  it("compares only the given keys, empty and missing alike", () => {
+    expect(storedDiffers({ a: "x", b: null, c: "other" }, { a: "x", b: undefined })).toBe(false);
+    expect(storedDiffers({ a: "x" }, { a: "y" })).toBe(true);
+  });
+  it("treats no row as different", () => {
+    expect(storedDiffers(undefined, { a: "x" })).toBe(true);
+    expect(storedDiffers(null, {})).toBe(true);
   });
 });

@@ -63,3 +63,21 @@ export function reviewsRequests(member, { tenantKind = "household", isAdmin = fa
 export function hasNoChildren(members) {
   return members.length > 0 && !members.some(m => !isAdultMember(m));
 }
+
+/**
+ * Whether a failed write may have been stored and only its answer lost: no
+ * HTTP status at all (the request threw), a 400 (the hub answers one for a
+ * write that timed out), or a 5xx other than 507. A 403, a 507 and a 409 are
+ * clean refusals. The caller re-reads by the id or stamp it kept to decide.
+ */
+export function outcomeUnknown(e) {
+  return e?.status == null || e.status === 400 || (e.status >= 500 && e.status !== 507);
+}
+
+/**
+ * Whether a stored row differs from the given values, over those keys only.
+ * An empty value and a missing one are the same; no row differs from any.
+ */
+export function storedDiffers(row, fields) {
+  return !row || Object.keys(fields).some(k => (row[k] ?? null) !== (fields[k] ?? null));
+}

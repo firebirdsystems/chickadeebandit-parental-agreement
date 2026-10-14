@@ -344,7 +344,7 @@
 
 <script type="module">
 import { memberColor, initial, esc, isAdult, hubConfirm, searchMatch, glyph } from "/hub-sdk.js";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren } from "./logic.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren, outcomeUnknown, storedDiffers } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
@@ -377,7 +377,7 @@ async function db(sql, params = []) {
   const json = await res.json().catch(() => null);
   // A refusal is an answer too: without this a write the hub turned down read
   // as a success, and the page went on to show a change that was never made.
-  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "The request could not be saved");
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw Object.assign(new Error(json?.error || "The request could not be saved"), { status: res.status });
   return json;
 }
 
@@ -515,31 +515,45 @@ async function logActivity(permissionId, action, detail = "") {
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────
-async function createRequest(fields) {
-  const id  = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await db(`INSERT INTO app_parental_agreement__permissions (
-    id, child_id, title, description,
-    from_datetime, to_datetime,
-    status, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`, [
-    id, ME.id, fields.title, fields.description,
-    fields.from_datetime, fields.to_datetime,
-    now, now,
-  ]);
+// A write whose answer was lost may have landed: it is looked up by the id the
+// form kept. undefined: it is not there, or could not be read.
+async function storedRequest(id) {
+  try { return (await db(`SELECT * FROM app_parental_agreement__permissions WHERE id = ?`, [id])).rows?.[0]; }
+  catch (e) { console.error(e); return undefined; }
+}
 
-  requests = [{
+async function createRequest(fields, form) {
+  // The form's own id, kept across a second press: a request that landed
+  // unheard is found by it rather than filed twice.
+  const id  = form ? (form.dataset.rowId ??= crypto.randomUUID()) : crypto.randomUUID();
+  const now = new Date().toISOString();
+  let row = {
     id, child_id: ME.id, title: fields.title, description: fields.description,
     from_datetime: fields.from_datetime, to_datetime: fields.to_datetime,
     status: "pending", created_at: now, updated_at: now,
-    approved_by: null, approved_at: null, approval_note: "",
-  }, ...requests];
-  closeModal();
-  render();
+  };
+  try {
+    await db(`INSERT INTO app_parental_agreement__permissions (
+      id, child_id, title, description,
+      from_datetime, to_datetime,
+      status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`, [
+      id, ME.id, fields.title, fields.description,
+      fields.from_datetime, fields.to_datetime,
+      now, now,
+    ]);
+  } catch (e) {
+    const stored = outcomeUnknown(e) ? await storedRequest(id) : undefined;
+    if (!stored) throw e;
+    console.error(e);
+    row = stored;
+  }
+
+  requests = [deriveStatus(row), ...requests.filter(r => r.id !== id)];
 
   Promise.all([
     logActivity(id, "created", `${ME.name} submitted a new permission request`),
-    notify(`✋ ${ME.name} is requesting permission`, `"${fields.title}" — open Parental Agreement to review`),
+    notify(`✋ ${ME.name} is requesting permission`, `"${row.title}" — open Parental Agreement to review`),
     // No activity-feed write here or at the two sibling sites below. That POST
     // used "message_posted", which is not one of the hub's own ActivityType
     // values a caller may write (CALLER_ALLOWED_ACTIVITY_TYPES) — the near
@@ -552,6 +566,16 @@ async function createRequest(fields) {
     // This app's own logActivity() is a different sink — it writes the request's
     // in-app audit trail — and is unaffected.
   ]).catch(() => {});
+
+  // Landed on an earlier press with what the form held then: what it holds now
+  // goes through the ordinary edit, or the stored request stays and says so.
+  // Awaited with the form still open, so nothing it closes is a later dialog.
+  if (storedDiffers(row, fields)) {
+    try { await updateRequest(id, fields); }
+    catch (e) { console.error(e); return showError("Saved as first entered — check it and update what changed."); }
+  }
+  closeModal();
+  render();
 }
 
 async function updateRequest(reqId, fields) {
@@ -566,6 +590,7 @@ async function updateRequest(reqId, fields) {
     WHERE id = ? AND child_id = ? AND status != 'cancelled'`,
   [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId, ME.id]);
   if (changed === 0) throw Object.assign(new Error("This request can no longer be changed."), { forUser: true });
+  cancelStamps.delete(reqId); // still open, so no earlier cancel of it landed
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = deriveStatus({
@@ -627,13 +652,29 @@ async function rejectRequest(reqId, note) {
   afterDecision(req, "rejected", note);
 }
 
+// A cancel's stamp, kept per request until the cancel is settled: one that
+// landed unheard (a second press then changes nothing) is known by it.
+const cancelStamps = new Map();
 async function cancelRequest(reqId) {
   if (!await hubConfirm({ message: "Cancel this permission request?", confirmLabel: "Cancel request" })) return;
   const req = requests.find(r => r.id === reqId);
-  const now = new Date().toISOString();
-  const { changed } = await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ? AND status != 'cancelled'`,
-    [now, reqId, ME.id]);
-  if (changed === 0) throw Object.assign(new Error("This request can no longer be cancelled."), { forUser: true });
+  const now = cancelStamps.get(reqId) ?? new Date().toISOString();
+  cancelStamps.set(reqId, now);
+  const landed = async () => !storedDiffers(await storedRequest(reqId), { status: "cancelled", updated_at: now });
+  let changed;
+  try {
+    ({ changed } = await db(`UPDATE app_parental_agreement__permissions SET status = 'cancelled', updated_at = ? WHERE id = ? AND child_id = ? AND status != 'cancelled'`,
+      [now, reqId, ME.id]));
+  } catch (e) {
+    if (!outcomeUnknown(e)) cancelStamps.delete(reqId);
+    if (!outcomeUnknown(e) || !await landed()) throw e;
+    console.error(e);
+  }
+  if (changed === 0 && !await landed()) {
+    cancelStamps.delete(reqId);
+    throw Object.assign(new Error("This request can no longer be cancelled."), { forUser: true });
+  }
+  cancelStamps.delete(reqId);
 
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = { ...requests[idx], status: "cancelled", updated_at: now };
@@ -724,7 +765,7 @@ window.submitForm = async function(existingId) {
     if (existingId) {
       await updateRequest(existingId, { title, description, from_datetime, to_datetime });
     } else {
-      await createRequest({ title, description, from_datetime, to_datetime });
+      await createRequest({ title, description, from_datetime, to_datetime }, form);
     }
   } catch (e) {
     console.error(e);

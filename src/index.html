@@ -344,7 +344,7 @@
 
 <script type="module">
 import { memberColor, initial, esc, isAdult, hubConfirm, searchMatch, glyph } from "/hub-sdk.js";
-import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren, outcomeUnknown, storedDiffers } from "./logic.js";
+import { STATUS_INFO, formatDateTime, localToISO, isoToLocal, searchableFields, reviewsRequests, hasNoChildren, outcomeUnknown, storedDiffers, failureLine } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
@@ -543,7 +543,11 @@ async function createRequest(fields, form) {
       now, now,
     ]);
   } catch (e) {
-    const stored = outcomeUnknown(e) ? await storedRequest(id) : undefined;
+    const unknown = outcomeUnknown(e);
+    const stored = unknown ? await storedRequest(id) : undefined;
+    // A retry's UNIQUE answer may be its own first press: with the read-back
+    // failed, nothing is known, so the line is "try again", not "already exists".
+    if (!stored && unknown && /UNIQUE/i.test(`${e?.code} ${e?.message}`)) throw Object.assign(new Error("create outcome unknown"), { cause: e });
     if (!stored) throw e;
     console.error(e);
     row = stored;
@@ -571,14 +575,14 @@ async function createRequest(fields, form) {
   // goes through the ordinary edit, or the stored request stays and says so.
   // Awaited with the form still open, so nothing it closes is a later dialog.
   if (storedDiffers(row, fields)) {
-    try { await updateRequest(id, fields); }
-    catch (e) { console.error(e); return showError("Saved as first entered — check it and update what changed."); }
+    try { await updateRequest(id, fields, form); }
+    catch (e) { console.error(e); return showError("Saved as first entered — check it and update what changed.", form); }
   }
-  closeModal();
+  closeDialog(form);
   render();
 }
 
-async function updateRequest(reqId, fields) {
+async function updateRequest(reqId, fields, form = modalEl) {
   const now = new Date().toISOString();
   // The child owns and may edit/cancel their own pending request (owner_only,
   // member_can_update defaults true). Bumping updated_at supersedes any prior
@@ -598,7 +602,7 @@ async function updateRequest(reqId, fields) {
     from_datetime: fields.from_datetime, to_datetime: fields.to_datetime,
     status: "pending", updated_at: now,
   });
-  closeModal();
+  closeDialog(form);
   render();
 
   Promise.all([
@@ -626,9 +630,9 @@ async function recordDecision(reqId, decision, note) {
 // What follows a stored decision ("approved" | "rejected"): close the dialog,
 // redraw, then the audit entry, the notification and the event. Also called
 // when a decision whose answer was lost turns out to be stored.
-function afterDecision(req, decision, note) {
+function afterDecision(req, decision, note, form) {
   const approved = decision === "approved";
-  closeModal();
+  closeDialog(form);
   render();
 
   Promise.all([
@@ -640,16 +644,16 @@ function afterDecision(req, decision, note) {
   ]).catch(() => {});
 }
 
-async function approveRequest(reqId, note) {
+async function approveRequest(reqId, note, form) {
   const req = await recordDecision(reqId, "approved", note);
   if (!req) return;
-  afterDecision(req, "approved", note);
+  afterDecision(req, "approved", note, form);
 }
 
-async function rejectRequest(reqId, note) {
+async function rejectRequest(reqId, note, form) {
   const req = await recordDecision(reqId, "rejected", note);
   if (!req) return;
-  afterDecision(req, "rejected", note);
+  afterDecision(req, "rejected", note, form);
 }
 
 // A cancel's stamp, kept per request until the cancel is settled: one that
@@ -706,6 +710,8 @@ function openModal(html) {
   modalEl.querySelector("[data-autofocus]")?.focus();
 }
 function closeModal() { modalEl?.remove(); modalEl = null; }
+// Close the dialog that submitted, only if it is still the open one.
+function closeDialog(dlg) { if (dlg === modalEl) closeModal(); }
 
 // ─── New / edit form ──────────────────────────────────────────────────────
 function openRequestForm(req = null) {
@@ -763,15 +769,15 @@ window.submitForm = async function(existingId) {
 
   try {
     if (existingId) {
-      await updateRequest(existingId, { title, description, from_datetime, to_datetime });
+      await updateRequest(existingId, { title, description, from_datetime, to_datetime }, form);
     } else {
       await createRequest({ title, description, from_datetime, to_datetime }, form);
     }
   } catch (e) {
     console.error(e);
     // A request that can no longer be changed has nothing left to retry.
-    if (e?.forUser) await showRefusal(e.message);
-    else showFormError(form, "Couldn’t save the request — try again.");
+    if (e?.forUser) await showRefusal(e.message, form);
+    else showFormError(form, failureLine(e, { action: "save the request", thing: "request" }));
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
@@ -814,21 +820,24 @@ window.submitDecision = async function(reqId, decision) {
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   form?.querySelector(".form-error")?.remove();
   try {
-    if (decision === "approve") await approveRequest(reqId, note);
-    else                        await rejectRequest(reqId, note);
+    if (decision === "approve") await approveRequest(reqId, note, form);
+    else                        await rejectRequest(reqId, note, form);
   } catch (e) {
     console.error(e);
-    if (e?.forUser) await showRefusal(e.message);
+    if (e?.forUser) await showRefusal(e.message, form);
     else if ([403, 404, 409].includes(e?.status)) {
       // The hub turned the decision down: read the requests again. One that was
       // cancelled meanwhile (a reviewer no longer reads it) has nothing to retry.
-      await loadRequests().catch(err => console.error(err));
+      const read = await loadRequests().then(() => true, err => { console.error(err); return false; });
       const req = requests.find(r => r.id === reqId);
-      if (!req || req.status === "cancelled") showError("This request was cancelled, so it can no longer be decided.");
-      else showFormError(form, "Couldn’t record the decision — try again.");
+      // Still there and open: a 403 is the permission line, and a 404 or 409
+      // for a request this reviewer still reads means its state moved. A failed
+      // read says neither: the status alone picks the line.
+      if (read && (!req || req.status === "cancelled")) showError("This request was cancelled, so it can no longer be decided.", form);
+      else { render(); showFormError(form, failureLine(e, { action: "record the decision", thing: "request", found: read ? true : undefined, guarded: true })); }
     }
-    else if (e?.status === undefined || (e.status >= 500 && e.status !== 507)) {
-      // No answer from the hub at all, or it failed on its side: the decision
+    else if (outcomeUnknown(e)) {
+      // No answer from the hub at all, a 400, or it failed on its side: the decision
       // may have been stored and only its answer lost, and a retry would
       // append a second one. Read the
       // requests again; if this one now carries this member's decision, it is
@@ -836,10 +845,10 @@ window.submitDecision = async function(reqId, decision) {
       await loadRequests().catch(err => console.error(err));
       const made = decision === "approve" ? "approved" : "rejected";
       const req = requests.find(r => r.id === reqId);
-      if (req && req.status === made && req.approved_by === ME.id && (req.approval_note ?? "") === note) afterDecision(req, made, note);
-      else showFormError(form, "Couldn’t record the decision — try again.");
+      if (req && req.status === made && req.approved_by === ME.id && (req.approval_note ?? "") === note) afterDecision(req, made, note, form);
+      else showFormError(form, failureLine(e, { action: "record the decision", thing: "request" }));
     }
-    else showFormError(form, "Couldn’t record the decision — try again.");
+    else showFormError(form, failureLine(e, { action: "record the decision", thing: "request" }));
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
@@ -924,7 +933,7 @@ window.openDecisionModal_ = function(reqId, decision) {
   openDecisionModal(req, decision);
 };
 
-window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => { console.error(e); return e?.forUser ? showRefusal(e.message) : showError("Couldn’t cancel the request — try again."); });
+window.cancelRequest  = (reqId) => cancelRequest(reqId).catch(e => { console.error(e); return e?.forUser ? showRefusal(e.message) : showError(failureLine(e, { action: "cancel the request", thing: "request" })); });
 window.closeModal     = closeModal;
 
 // ─── Render ───────────────────────────────────────────────────────────────
@@ -993,17 +1002,18 @@ function errorHtml() {
 
 // A failure closes whatever dialog raised it and is shown above the list, so
 // it is still on screen once the dialog is gone.
-function showError(message) {
+// `dlg`: the dialog that raised it, closed only if it is still the open one.
+function showError(message, dlg = modalEl) {
   errorMsg = message || "Something went wrong. Please try again.";
-  closeModal();
+  closeDialog(dlg);
   render();
 }
 
 // The hub turned the write down because the request changed elsewhere: read
 // the list again first, so the card on screen is the stored one.
-async function showRefusal(message) {
+async function showRefusal(message, dlg = modalEl) {
   await loadRequests().catch(e => console.error(e));
-  showError(message);
+  showError(message, dlg);
 }
 
 // A failed save from a dialog the user typed into: the dialog stays open as
@@ -1011,7 +1021,7 @@ async function showRefusal(message) {
 // failure goes above the list instead.
 function showFormError(form, message) {
   const actions = form && form === modalEl ? form.querySelector(".modal-actions") : null;
-  if (!actions) { showError(message); return; }
+  if (!actions) { showError(message, form); return; }
   const el = document.createElement("div");
   el.className = "form-error";
   el.setAttribute("role", "alert");

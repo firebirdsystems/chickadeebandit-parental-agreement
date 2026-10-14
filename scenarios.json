@@ -65,6 +65,36 @@
       ]
     },
     {
+      "name": "the agenda statement lists a request whose latest decision is approved, and not one approved and then rejected",
+      "members": { "parent": "adult", "childA": "child" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__permissions (id, child_id, title, from_datetime, to_datetime, status, created_at, updated_at) VALUES ('p1', ?, 'Sleepover', '2026-01-10T18:00', '2026-01-11T10:00', 'pending', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'), ('p2', ?, 'Concert', '2026-01-10T19:00', '2026-01-10T23:00', 'pending', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["{{childA}}", "{{childA}}"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_parental_agreement__decisions (id, permission_id, child_id, decision, note, decided_by, decided_at) VALUES ('d1', 'p1', ?, 'approved', '', ?, '2026-01-02T00:00:00Z'), ('d2', 'p1', ?, 'rejected', '', ?, '2026-01-03T00:00:00Z'), ('d3', 'p2', ?, 'approved', '', ?, '2026-01-02T00:00:00Z')",
+          "params": ["{{childA}}", "{{parent}}", "{{childA}}", "{{parent}}", "{{childA}}", "{{parent}}"]
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT p.id AS id, p.title AS title, NULLIF(p.description, '') AS subtitle, p.from_datetime AS when_at, p.child_id AS member_id FROM app_parental_agreement__permissions p JOIN app_parental_agreement__decisions d ON d.permission_id = p.id AND d.decision = 'approved' AND d.decided_at >= p.updated_at LEFT JOIN app_parental_agreement__decisions d2 ON d2.permission_id = p.id AND d2.decided_at >= d.decided_at AND d2.decision != 'approved' WHERE substr(p.from_datetime, 1, 10) = ? AND p.status != 'cancelled' AND d2.id IS NULL GROUP BY p.id ORDER BY p.from_datetime LIMIT 20",
+          "params": ["2026-01-10"],
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "p2" }] }
+        },
+        {
+          "action": "db",
+          "as": "childA",
+          "sql": "SELECT p.id AS id, p.title AS title, NULLIF(p.description, '') AS subtitle, p.from_datetime AS when_at, p.child_id AS member_id FROM app_parental_agreement__permissions p JOIN app_parental_agreement__decisions d ON d.permission_id = p.id AND d.decision = 'approved' AND d.decided_at >= p.updated_at LEFT JOIN app_parental_agreement__decisions d2 ON d2.permission_id = p.id AND d2.decided_at >= d.decided_at AND d2.decision != 'approved' WHERE substr(p.from_datetime, 1, 10) = ? AND p.status != 'cancelled' AND d2.id IS NULL GROUP BY p.id ORDER BY p.from_datetime LIMIT 20",
+          "params": ["2026-01-10"],
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "p2" }] }
+        }
+      ]
+    },
+    {
       "name": "in a shared space only the steward reaches every member's permission requests; a participant adult reaches only their own",
       "context": "shared_space",
       "members": { "a": "adult", "b": "adult", "steward": "admin" },

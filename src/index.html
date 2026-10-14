@@ -598,30 +598,33 @@ async function recordDecision(reqId, decision, note) {
   return req;
 }
 
-async function approveRequest(reqId, note) {
-  const req = await recordDecision(reqId, "approved", note);
-  if (!req) return;
+// What follows a stored decision ("approved" | "rejected"): close the dialog,
+// redraw, then the audit entry, the notification and the event. Also called
+// when a decision whose answer was lost turns out to be stored.
+function afterDecision(req, decision, note) {
+  const approved = decision === "approved";
   closeModal();
   render();
 
   Promise.all([
-    logActivity(reqId, "approved", `${ME.name} approved the request${note ? `: "${note}"` : ""}`),
-    notify(`✅ Permission approved by ${ME.name}`, `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`),
-    publishEvent("parental-agreement.approved", reqId, { title: req.title, approver: ME.name, child_id: req.child_id }),
+    logActivity(req.id, decision, `${ME.name} ${decision} the request${note ? `: "${note}"` : ""}`),
+    approved
+      ? notify(`✅ Permission approved by ${ME.name}`, `"${req.title}" has been approved${note ? ` — Note: ${note}` : ""}`)
+      : notify(`❌ Permission denied by ${ME.name}`, `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`),
+    publishEvent(`parental-agreement.${decision}`, req.id, { title: req.title, approver: ME.name, child_id: req.child_id }),
   ]).catch(() => {});
+}
+
+async function approveRequest(reqId, note) {
+  const req = await recordDecision(reqId, "approved", note);
+  if (!req) return;
+  afterDecision(req, "approved", note);
 }
 
 async function rejectRequest(reqId, note) {
   const req = await recordDecision(reqId, "rejected", note);
   if (!req) return;
-  closeModal();
-  render();
-
-  Promise.all([
-    logActivity(reqId, "rejected", `${ME.name} rejected the request${note ? `: "${note}"` : ""}`),
-    notify(`❌ Permission denied by ${ME.name}`, `"${req.title}" was not approved${note ? ` — Note: ${note}` : ""}`),
-    publishEvent("parental-agreement.rejected", reqId, { title: req.title, approver: ME.name, child_id: req.child_id }),
-  ]).catch(() => {});
+  afterDecision(req, "rejected", note);
 }
 
 async function cancelRequest(reqId) {
@@ -781,6 +784,17 @@ window.submitDecision = async function(reqId, decision) {
       await loadRequests().catch(err => console.error(err));
       const req = requests.find(r => r.id === reqId);
       if (!req || req.status === "cancelled") showError("This request was cancelled, so it can no longer be decided.");
+      else showFormError(form, "Couldn’t record the decision — try again.");
+    }
+    else if (e?.status === undefined) {
+      // No answer from the hub at all: the decision may have been stored and
+      // only its answer lost, and a retry would append a second one. Read the
+      // requests again; if this one now carries this member's decision, it is
+      // done. A failed read leaves the list as it was, so the line below shows.
+      await loadRequests().catch(err => console.error(err));
+      const made = decision === "approve" ? "approved" : "rejected";
+      const req = requests.find(r => r.id === reqId);
+      if (req && req.status === made && req.approved_by === ME.id && (req.approval_note ?? "") === note) afterDecision(req, made, note);
       else showFormError(form, "Couldn’t record the decision — try again.");
     }
     else showFormError(form, "Couldn’t record the decision — try again.");

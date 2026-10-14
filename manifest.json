@@ -139,7 +139,7 @@
     "label": "Permission",
     "source": {
       "kind": "sql",
-      "query": "SELECT p.id AS id, p.title AS title, NULLIF(p.description, '') AS subtitle, p.from_datetime AS when_at, p.child_id AS member_id FROM app_parental_agreement__permissions p JOIN app_parental_agreement__decisions d ON d.permission_id = p.id AND d.decision = 'approved' AND d.decided_at >= p.updated_at WHERE substr(p.from_datetime, 1, 10) = :today AND p.status != 'cancelled' GROUP BY p.id ORDER BY p.from_datetime LIMIT 20"
+      "query": "SELECT p.id AS id, p.title AS title, NULLIF(p.description, '') AS subtitle, p.from_datetime AS when_at, p.child_id AS member_id FROM app_parental_agreement__permissions p JOIN app_parental_agreement__decisions d ON d.permission_id = p.id AND d.decision = 'approved' AND d.decided_at >= p.updated_at LEFT JOIN app_parental_agreement__decisions d2 ON d2.permission_id = p.id AND d2.decided_at >= d.decided_at AND d2.decision != 'approved' WHERE substr(p.from_datetime, 1, 10) = :today AND p.status != 'cancelled' AND d2.id IS NULL GROUP BY p.id ORDER BY p.from_datetime LIMIT 20"
     }
   },
   "glance": {

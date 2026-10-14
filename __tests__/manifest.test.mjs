@@ -52,6 +52,23 @@ describe("manifest.json", () => {
     }
   });
 
+  // A request approved and then rejected is not approved: the agenda lists a
+  // request only when no rejection follows the approval it matched.
+  it("agenda lists a request by its LATEST decision, not any approved one", () => {
+    const sql = manifest.agenda.source.query;
+    expect(sql).toMatch(/^(SELECT|WITH) /);
+    expect(sql).not.toMatch(/;|NULLS LAST|date\('now'\)/i);
+    expect(sql).toContain("= :today");
+    expect(sql).toContain("LEFT JOIN app_parental_agreement__decisions d2 ON d2.permission_id = p.id AND d2.decided_at >= d.decided_at AND d2.decision != 'approved'");
+    expect(sql).toContain("AND p.status != 'cancelled' AND d2.id IS NULL");
+    // scenarios.json replays this statement through api/db with the day bound
+    // as a parameter; a drifted copy would test a statement nobody runs.
+    const scenarios = JSON.parse(readFileSync(join(__dirname, "../scenarios.json"), "utf-8")).scenarios;
+    const copies = scenarios.flatMap((s) => s.steps).filter((st) => st.action === "db" && st.sql.includes(" d2 "));
+    expect(copies.length).toBeGreaterThan(0);
+    for (const st of copies) expect(st.sql).toBe(sql.replace(":today", "?"));
+  });
+
   it("declares publish_acls for value-bearing events", () => {
     expect(manifest.publish_acls).toBeDefined();
     expect(manifest.publish_acls["parental-agreement.approved"]).toBeDefined();

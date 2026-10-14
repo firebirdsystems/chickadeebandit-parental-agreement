@@ -612,16 +612,27 @@ async function updateRequest(reqId, fields, form = modalEl) {
   ]).catch(() => {});
 }
 
-async function recordDecision(reqId, decision, note) {
+async function recordDecision(reqId, decision, note, form) {
   const req = requests.find(r => r.id === reqId);
   // Already decided or gone from the list: say so rather than leave the dialog
   // open with nothing on it.
   if (!req || req.status !== "pending") throw Object.assign(new Error("This request can no longer be decided."), { forUser: true });
   const now   = new Date().toISOString();
+  // The decision's id is pinned to the form and to what it says: a retry
+  // after a lost answer sends the same id, and the hub answers with the record
+  // the first try stored instead of appending a second. A different decision
+  // or note is a new record, so the hub never vouches for words it did not store.
+  const pin = `${decision}\n${note}`;
+  if (form && form.dataset.decisionPin !== pin) {
+    form.dataset.decisionPin = pin;
+    form.dataset.decisionId = crypto.randomUUID();
+  }
+  const id = form?.dataset.decisionId ?? crypto.randomUUID();
   // Adult-only append endpoint derives decided_by/decided_at and keeps direct
   // app SQL from mutating the decision trail.
-  const result = await appendRecord("decisions", { permission_id: reqId, child_id: req.child_id, decision, note });
+  const result = await appendRecord("decisions", { id, permission_id: reqId, child_id: req.child_id, decision, note });
 
+  decisions = decisions.filter(d => d.id !== result.id);
   decisions.push({ id: result.id, permission_id: reqId, child_id: req.child_id, decision, note, decided_by: ME.id, decided_at: result.created_at ?? now });
   const idx = requests.findIndex(r => r.id === reqId);
   if (idx !== -1) requests[idx] = deriveStatus(requests[idx]);
@@ -646,13 +657,13 @@ function afterDecision(req, decision, note, form) {
 }
 
 async function approveRequest(reqId, note, form) {
-  const req = await recordDecision(reqId, "approved", note);
+  const req = await recordDecision(reqId, "approved", note, form);
   if (!req) return;
   afterDecision(req, "approved", note, form);
 }
 
 async function rejectRequest(reqId, note, form) {
-  const req = await recordDecision(reqId, "rejected", note);
+  const req = await recordDecision(reqId, "rejected", note, form);
   if (!req) return;
   afterDecision(req, "rejected", note, form);
 }
@@ -842,10 +853,10 @@ window.submitDecision = async function(reqId, decision) {
     }
     else if (outcomeUnknown(e)) {
       // No answer from the hub at all, a 400, or it failed on its side: the decision
-      // may have been stored and only its answer lost, and a retry would
-      // append a second one. Read the
-      // requests again; if this one now carries this member's decision, it is
-      // done. A failed read leaves the list as it was, so the line below shows.
+      // may have been stored and only its answer lost. Read the requests again;
+      // if this one now carries this member's decision, it is done. A failed
+      // read leaves the list as it was and the line below shows: a retry sends
+      // the same pinned id, so it cannot append a second decision.
       await loadRequests().catch(err => console.error(err));
       const made = decision === "approve" ? "approved" : "rejected";
       const req = requests.find(r => r.id === reqId);

@@ -71,12 +71,14 @@
       "member_column": "actor_id",
       "adults_bypass": true,
       "member_can_update": false,
-      "endpoint_writes_only": true,
-      "retain_days": {
-        "default": 730,
-        "timestamp_column": "created_at",
-        "override_key": "activity_history"
-      }
+      "endpoint_writes_only": true
+    }
+  },
+  "retention": {
+    "activity": {
+      "default": 730,
+      "timestamp_column": "created_at",
+      "override_key": "activity_history"
     }
   },
   "append_only_records": {
@@ -152,9 +154,6 @@
   "widget": {
     "label": "Permissions",
     "size": "small"
-  },
-  "resource_limits": {
-    "max_db_bytes": 52428800
   },
   "icon": "✋"
 }

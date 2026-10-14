@@ -69,6 +69,17 @@ describe("manifest.json", () => {
     for (const st of copies) expect(st.sql).toBe(sql.replace(":today", "?"));
   });
 
+  // The stored status stays 'pending' after a parent answers (approval lives
+  // in the decisions table), so the badge must leave answered requests out,
+  // as the widget does.
+  it("badge counts only requests with no decision since their last edit", () => {
+    const sql = manifest.glance.source.query;
+    expect(sql).toMatch(/^SELECT /);
+    expect(sql).not.toMatch(/;/);
+    expect(sql).toContain("LEFT JOIN app_parental_agreement__decisions d ON d.permission_id = p.id AND d.decided_at >= p.updated_at");
+    expect(sql).toContain("WHERE p.status = 'pending' AND d.id IS NULL");
+  });
+
   it("declares publish_acls for value-bearing events", () => {
     expect(manifest.publish_acls).toBeDefined();
     expect(manifest.publish_acls["parental-agreement.approved"]).toBeDefined();

@@ -786,9 +786,10 @@ window.submitDecision = async function(reqId, decision) {
       if (!req || req.status === "cancelled") showError("This request was cancelled, so it can no longer be decided.");
       else showFormError(form, "Couldn’t record the decision — try again.");
     }
-    else if (e?.status === undefined) {
-      // No answer from the hub at all: the decision may have been stored and
-      // only its answer lost, and a retry would append a second one. Read the
+    else if (e?.status === undefined || (e.status >= 500 && e.status !== 507)) {
+      // No answer from the hub at all, or it failed on its side: the decision
+      // may have been stored and only its answer lost, and a retry would
+      // append a second one. Read the
       // requests again; if this one now carries this member's decision, it is
       // done. A failed read leaves the list as it was, so the line below shows.
       await loadRequests().catch(err => console.error(err));

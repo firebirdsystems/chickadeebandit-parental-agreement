@@ -563,7 +563,7 @@ async function updateRequest(reqId, fields) {
     title = ?, description = ?,
     from_datetime = ?, to_datetime = ?,
     status = 'pending', updated_at = ?
-    WHERE id = ? AND child_id = ? AND status = 'pending'`,
+    WHERE id = ? AND child_id = ? AND status != 'cancelled'`,
   [fields.title, fields.description, fields.from_datetime, fields.to_datetime, now, reqId, ME.id]);
   if (changed === 0) throw Object.assign(new Error("This request can no longer be changed."), { forUser: true });
 
@@ -584,7 +584,9 @@ async function updateRequest(reqId, fields) {
 
 async function recordDecision(reqId, decision, note) {
   const req = requests.find(r => r.id === reqId);
-  if (!req || req.status !== "pending") return null;
+  // Already decided or gone from the list: say so rather than leave the dialog
+  // open with nothing on it.
+  if (!req || req.status !== "pending") throw Object.assign(new Error("This request can no longer be decided."), { forUser: true });
   const now   = new Date().toISOString();
   // Adult-only append endpoint derives decided_by/decided_at and keeps direct
   // app SQL from mutating the decision trail.
@@ -772,7 +774,8 @@ window.submitDecision = async function(reqId, decision) {
     else                        await rejectRequest(reqId, note);
   } catch (e) {
     console.error(e);
-    showFormError(form, "Couldn’t record the decision — try again.");
+    if (e?.forUser) await showRefusal(e.message);
+    else showFormError(form, "Couldn’t record the decision — try again.");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
